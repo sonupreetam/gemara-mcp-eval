@@ -1,0 +1,6 @@
+[submodule "reference/gemara"]
+	path = reference/gemara
+	url = https://github.com/gemaraproj/gemara.git
+[submodule "reference/gemara-mcp"]
+	path = reference/gemara-mcp
+	url = https://github.com/gemaraproj/gemara-mcp.git
