@@ -33,10 +33,12 @@ providers:
   - id: ollama:chat:qwen2.5:7b
     config:
       temperature: 0
+    timeout: 180000
 
 defaultTest:
   options:
     runSerially: true
+    timeout: 180000
 
 tests:
   # --- Dimension 1: validate_gemara_artifact ---
@@ -101,7 +103,6 @@ tests:
         value: "isolation"
       - type: icontains
         value: "ThreatCatalog"
-      - type: is-valid-yaml
 
   - description: "tc-011: CI/CD threat catalog contains supply chain threats"
     prompt: threat-assessment

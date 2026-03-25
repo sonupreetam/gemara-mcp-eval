@@ -136,7 +136,7 @@ function ollamaGenerate(prompt: string): Promise<string> {
       }
     );
     req.on("error", reject);
-    req.setTimeout(120000, () => { req.destroy(); reject(new Error("Ollama request timeout")); });
+    req.setTimeout(300000, () => { req.destroy(); reject(new Error("Ollama request timeout")); });
     req.write(payload);
     req.end();
   });

@@ -1,9 +1,13 @@
 .PHONY: all corpus-validate eval-all eval-detllm eval-deepeval eval-mcpevals eval-mcp-eval eval-dfah eval-promptfoo report clean
 
+-include .env
+export
+
 CORPUS_DIR := corpus
 EVAL_DIR := eval
 ANALYSIS_DIR := analysis
 RESULTS_DIR := results
+CONTAINER_RUNTIME ?= docker
 
 all: eval-all report
 
@@ -22,12 +26,12 @@ corpus-validate:
 # --- Infrastructure ---
 
 server-up:
-	docker compose up -d
+	$(CONTAINER_RUNTIME) compose up -d
 	@echo "Waiting for gemara-mcp to be ready..."
 	@sleep 3
 
 server-down:
-	docker compose down
+	$(CONTAINER_RUNTIME) compose down
 
 # --- Individual Evaluations ---
 

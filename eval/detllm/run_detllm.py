@@ -9,6 +9,7 @@ Uses Ollama (local) as the LLM backend via its HTTP API.
 
 import argparse
 import json
+import os
 import sys
 import urllib.request
 from collections import Counter
@@ -19,7 +20,12 @@ import yaml
 
 def load_config(config_path: Path) -> dict:
     with open(config_path) as f:
-        return yaml.safe_load(f)
+        cfg = yaml.safe_load(f)
+    if os.environ.get("OLLAMA_BASE_URL"):
+        cfg["ollama_base_url"] = os.environ["OLLAMA_BASE_URL"]
+    if os.environ.get("OLLAMA_MODEL"):
+        cfg["model"] = os.environ["OLLAMA_MODEL"]
+    return cfg
 
 
 def load_corpus(corpus_dir: Path) -> dict:

@@ -1,9 +1,8 @@
 services:
   gemara-mcp:
-    image: ghcr.io/gemaraproj/gemara-mcp:v0.1.0
-    command: ["serve", "--mode", "artifact"]
-    ports:
-      - "3000:3000"
+    image: ${GEMARA_MCP_IMAGE:-ghcr.io/gemaraproj/gemara-mcp:v0.1.0}
+    command: ["serve", "--mode", "${GEMARA_MCP_MODE:-artifact}"]
+    stdin_open: true
     healthcheck:
       test: ["CMD", "true"]
       interval: 10s
