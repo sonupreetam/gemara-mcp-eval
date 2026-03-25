@@ -1,0 +1,5 @@
+{
+  "valid": false,
+  "errors_must_contain": ["type", "ThreatCatalog"],
+  "message_pattern": "validation failed"
+}

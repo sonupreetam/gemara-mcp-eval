@@ -1,0 +1,294 @@
+scenarios:
+  # ===== Dimension 1: validate_gemara_artifact (Tool) =====
+
+  - id: "tc-001"
+    name: "Validate valid Layer 2 ControlCatalog"
+    target: "validate_gemara_artifact"
+    type: "tool"
+    input_file: "inputs/tc-001-valid-control-catalog.yaml"
+    tool_params:
+      definition: "#ControlCatalog"
+    expected:
+      result: "valid"
+      golden_file: "golden/tc-001-expected.json"
+    determinism:
+      runs: 20
+      match_type: "exact"
+      threshold: 1.0
+
+  - id: "tc-002"
+    name: "Validate ControlCatalog missing required group"
+    target: "validate_gemara_artifact"
+    type: "tool"
+    input_file: "inputs/tc-002-invalid-missing-group.yaml"
+    tool_params:
+      definition: "#ControlCatalog"
+    expected:
+      result: "invalid"
+      golden_file: "golden/tc-002-expected.json"
+    determinism:
+      runs: 20
+      match_type: "exact"
+      threshold: 1.0
+
+  - id: "tc-003"
+    name: "Validate valid Layer 2 ThreatCatalog"
+    target: "validate_gemara_artifact"
+    type: "tool"
+    input_file: "inputs/tc-003-valid-threat-catalog.yaml"
+    tool_params:
+      definition: "#ThreatCatalog"
+    expected:
+      result: "valid"
+      golden_file: "golden/tc-003-expected.json"
+    determinism:
+      runs: 20
+      match_type: "exact"
+      threshold: 1.0
+
+  - id: "tc-004"
+    name: "Validate ThreatCatalog with wrong metadata type"
+    target: "validate_gemara_artifact"
+    type: "tool"
+    input_file: "inputs/tc-004-invalid-wrong-type.yaml"
+    tool_params:
+      definition: "#ThreatCatalog"
+    expected:
+      result: "invalid"
+      golden_file: "golden/tc-004-expected.json"
+    determinism:
+      runs: 20
+      match_type: "exact"
+      threshold: 1.0
+
+  - id: "tc-005"
+    name: "Validate empty artifact content"
+    target: "validate_gemara_artifact"
+    type: "tool"
+    input_file: "inputs/tc-005-empty.yaml"
+    tool_params:
+      definition: "#ControlCatalog"
+    expected:
+      result: "invalid"
+      golden_file: "golden/tc-005-expected.json"
+    determinism:
+      runs: 20
+      match_type: "exact"
+      threshold: 1.0
+
+  # ===== Dimension 2: threat_assessment (Prompt) =====
+
+  - id: "tc-010"
+    name: "Threat assessment for Kubernetes multi-tenant PII system"
+    target: "threat_assessment"
+    type: "prompt"
+    prompt_params:
+      COMPONENT: "Multi-tenant Kubernetes PII Processing Platform"
+      ID_PREFIX: "K8S-PII"
+    prompt_template: "prompts/create-threat-catalog.txt"
+    expected:
+      threats_must_include:
+        - "data exfiltration"
+        - "tenant isolation breach"
+        - "unauthorized access"
+      artifact_type: "ThreatCatalog"
+      golden_file: "golden/tc-010-expected.yaml"
+    determinism:
+      runs: 20
+      match_type: "jaccard"
+      threshold: 0.8
+
+  - id: "tc-011"
+    name: "Threat assessment for CI/CD pipeline with unsigned images"
+    target: "threat_assessment"
+    type: "prompt"
+    prompt_params:
+      COMPONENT: "CI/CD Pipeline with Container Registry"
+      ID_PREFIX: "CICD"
+    prompt_template: "prompts/create-threat-catalog.txt"
+    expected:
+      threats_must_include:
+        - "supply chain compromise"
+        - "image tampering"
+        - "malicious dependency"
+      artifact_type: "ThreatCatalog"
+      golden_file: "golden/tc-011-expected.yaml"
+    determinism:
+      runs: 20
+      match_type: "jaccard"
+      threshold: 0.8
+
+  - id: "tc-012"
+    name: "Threat assessment for object storage service"
+    target: "threat_assessment"
+    type: "prompt"
+    prompt_params:
+      COMPONENT: "Cloud Object Storage Service"
+      ID_PREFIX: "OBJ-STORE"
+    prompt_template: "prompts/create-threat-catalog.txt"
+    expected:
+      threats_must_include:
+        - "data loss"
+        - "unauthorized access"
+        - "data replication to untrusted location"
+      artifact_type: "ThreatCatalog"
+      golden_file: "golden/tc-012-expected.yaml"
+    determinism:
+      runs: 20
+      match_type: "jaccard"
+      threshold: 0.8
+
+  - id: "tc-013"
+    name: "Threat assessment for API gateway"
+    target: "threat_assessment"
+    type: "prompt"
+    prompt_params:
+      COMPONENT: "Public-facing API Gateway"
+      ID_PREFIX: "APIGW"
+    prompt_template: "prompts/create-threat-catalog.txt"
+    expected:
+      threats_must_include:
+        - "denial of service"
+        - "injection attack"
+        - "authentication bypass"
+      artifact_type: "ThreatCatalog"
+      golden_file: "golden/tc-013-expected.yaml"
+    determinism:
+      runs: 20
+      match_type: "jaccard"
+      threshold: 0.8
+
+  - id: "tc-014"
+    name: "Threat assessment for secrets management vault"
+    target: "threat_assessment"
+    type: "prompt"
+    prompt_params:
+      COMPONENT: "Centralized Secrets Management Vault"
+      ID_PREFIX: "VAULT"
+    prompt_template: "prompts/create-threat-catalog.txt"
+    expected:
+      threats_must_include:
+        - "credential theft"
+        - "unauthorized secret access"
+        - "key compromise"
+      artifact_type: "ThreatCatalog"
+      golden_file: "golden/tc-014-expected.yaml"
+    determinism:
+      runs: 20
+      match_type: "jaccard"
+      threshold: 0.8
+
+  # ===== Dimension 3: control_catalog (Prompt) =====
+
+  - id: "tc-020"
+    name: "Control catalog for Kubernetes workload protection"
+    target: "control_catalog"
+    type: "prompt"
+    prompt_params:
+      COMPONENT: "Kubernetes Workload Protection"
+      ID_PREFIX: "K8S-WP"
+    prompt_template: "prompts/create-control-catalog.txt"
+    expected:
+      controls_must_include:
+        - "encryption in transit"
+        - "network policy enforcement"
+        - "pod security"
+      families_must_include:
+        - "data-protection"
+        - "access-control"
+      artifact_type: "ControlCatalog"
+      golden_file: "golden/tc-020-expected.yaml"
+    determinism:
+      runs: 20
+      match_type: "jaccard"
+      threshold: 0.8
+
+  - id: "tc-021"
+    name: "Control catalog for logging and audit"
+    target: "control_catalog"
+    type: "prompt"
+    prompt_params:
+      COMPONENT: "Enterprise Audit Logging Platform"
+      ID_PREFIX: "AUDIT"
+    prompt_template: "prompts/create-control-catalog.txt"
+    expected:
+      controls_must_include:
+        - "log integrity"
+        - "log access restriction"
+        - "log retention"
+      families_must_include:
+        - "audit-logging"
+      artifact_type: "ControlCatalog"
+      golden_file: "golden/tc-021-expected.yaml"
+    determinism:
+      runs: 20
+      match_type: "jaccard"
+      threshold: 0.8
+
+  - id: "tc-022"
+    name: "Control catalog for identity and access management"
+    target: "control_catalog"
+    type: "prompt"
+    prompt_params:
+      COMPONENT: "Cloud IAM Service"
+      ID_PREFIX: "IAM"
+    prompt_template: "prompts/create-control-catalog.txt"
+    expected:
+      controls_must_include:
+        - "multi-factor authentication"
+        - "least privilege"
+        - "credential rotation"
+      families_must_include:
+        - "access-control"
+        - "authentication"
+      artifact_type: "ControlCatalog"
+      golden_file: "golden/tc-022-expected.yaml"
+    determinism:
+      runs: 20
+      match_type: "jaccard"
+      threshold: 0.8
+
+  - id: "tc-023"
+    name: "Control catalog for data encryption service"
+    target: "control_catalog"
+    type: "prompt"
+    prompt_params:
+      COMPONENT: "Data Encryption Key Management Service"
+      ID_PREFIX: "ENC-KMS"
+    prompt_template: "prompts/create-control-catalog.txt"
+    expected:
+      controls_must_include:
+        - "encryption at rest"
+        - "key rotation"
+        - "key access control"
+      families_must_include:
+        - "data-protection"
+        - "key-management"
+      artifact_type: "ControlCatalog"
+      golden_file: "golden/tc-023-expected.yaml"
+    determinism:
+      runs: 20
+      match_type: "jaccard"
+      threshold: 0.8
+
+  - id: "tc-024"
+    name: "Control catalog for container image supply chain"
+    target: "control_catalog"
+    type: "prompt"
+    prompt_params:
+      COMPONENT: "Container Image Build and Distribution Pipeline"
+      ID_PREFIX: "IMG-SC"
+    prompt_template: "prompts/create-control-catalog.txt"
+    expected:
+      controls_must_include:
+        - "image signing"
+        - "vulnerability scanning"
+        - "base image provenance"
+      families_must_include:
+        - "supply-chain"
+      artifact_type: "ControlCatalog"
+      golden_file: "golden/tc-024-expected.yaml"
+    determinism:
+      runs: 20
+      match_type: "jaccard"
+      threshold: 0.8

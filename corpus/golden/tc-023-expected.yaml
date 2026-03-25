@@ -1,0 +1,12 @@
+expected_control_titles:
+  - "Enforce Encryption at Rest"
+  - "Enforce Key Rotation"
+  - "Restrict Key Access"
+  - "Enforce Key Separation"
+  - "Audit Key Usage"
+
+expected_control_id_prefix: "ENC-KMS.C"
+
+expected_families:
+  - "data-protection"
+  - "key-management"

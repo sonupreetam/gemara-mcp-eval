@@ -1,0 +1,14 @@
+expected_threat_titles:
+  - "Data Loss or Corruption"
+  - "Unauthorized Access to Stored Objects"
+  - "Data Replication to Untrusted Location"
+  - "Misconfigured Access Policies"
+  - "Data Exfiltration via Public Bucket"
+
+expected_threat_id_prefix: "OBJ-STORE.THR"
+
+expected_capabilities:
+  - "object storage"
+  - "access policy management"
+  - "data replication"
+  - "encryption at rest"

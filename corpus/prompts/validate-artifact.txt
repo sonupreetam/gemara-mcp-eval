@@ -1,0 +1,7 @@
+Validate the following YAML artifact against the Gemara {{definition}} schema.
+Return the validation result including whether it is valid, any errors found, and a summary message.
+
+Artifact content:
+```yaml
+{{artifact_content}}
+```

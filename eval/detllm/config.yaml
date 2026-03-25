@@ -1,0 +1,16 @@
+# detLLM configuration for gemara-mcp determinism evaluation
+#
+# Measures raw LLM determinism in isolation (no MCP server involved).
+# Tests whether the LLM produces consistent outputs for compliance prompts.
+
+backend: openai
+model: gpt-4o-2025-08-06
+
+tier: 1
+runs: 20
+batch_size: 1
+
+temperature: 0
+seed: 42
+
+output_dir: ../../results/detllm-artifacts

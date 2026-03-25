@@ -1,0 +1,14 @@
+expected_threat_titles:
+  - "Credential Theft from Vault"
+  - "Unauthorized Secret Access"
+  - "Key Compromise or Leakage"
+  - "Privilege Escalation via Secret Access"
+  - "Audit Log Tampering"
+
+expected_threat_id_prefix: "VAULT.THR"
+
+expected_capabilities:
+  - "secret storage"
+  - "access control"
+  - "audit logging"
+  - "key rotation"

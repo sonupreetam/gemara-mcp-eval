@@ -1,0 +1,33 @@
+metadata:
+  id: EVAL-TC
+  type: ThreatCatalog
+  gemara-version: "1.0"
+  description: |
+    A minimal but valid threat catalog for determinism evaluation.
+  author:
+    id: eval-harness
+    name: Evaluation Harness
+    type: Software
+  mapping-references:
+    - id: EVAL-CC
+      title: Evaluation Control Catalog
+      version: "1.0.0"
+      url: https://example.com/eval-cc
+      description: Control catalog used as a reference for capability mappings
+title: Evaluation Threat Catalog
+groups:
+  - id: data-threats
+    title: Data Threats
+    description: Threats related to data confidentiality and integrity.
+threats:
+  - id: EVAL-TC.THR01
+    group: data-threats
+    title: Data Intercepted in Transit
+    description: |
+      An adversary intercepts unencrypted network traffic to read or
+      modify data being transmitted between services.
+    capabilities:
+      - reference-id: EVAL-CC
+        entries:
+          - reference-id: EVAL-CC.C01
+            remarks: Encryption in transit mitigates interception

@@ -1,0 +1,13 @@
+expected_control_titles:
+  - "Enforce Encryption in Transit"
+  - "Enforce Network Policy Isolation"
+  - "Enforce Pod Security Standards"
+  - "Restrict Privileged Containers"
+  - "Enforce RBAC Least Privilege"
+
+expected_control_id_prefix: "K8S-WP.C"
+
+expected_families:
+  - "data-protection"
+  - "access-control"
+  - "network-security"

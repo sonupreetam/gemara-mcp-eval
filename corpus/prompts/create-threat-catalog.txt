@@ -1,0 +1,8 @@
+I want to create a threat assessment for **{{COMPONENT}}** using the ID prefix **{{ID_PREFIX}}**. Walk me through it step by step.
+
+Use the FINOS CCC Core as the default mapping reference.
+For the author, use id "eval-harness" and name "Evaluation Harness" with type "Software Assisted".
+Skip MITRE ATT&CK vector mappings for this assessment.
+
+Identify the core capabilities of this component, then identify the threats for each capability.
+Produce a complete, valid Gemara ThreatCatalog YAML artifact and validate it.

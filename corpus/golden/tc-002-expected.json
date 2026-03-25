@@ -1,0 +1,5 @@
+{
+  "valid": false,
+  "errors_must_contain": ["group", "nonexistent-group"],
+  "message_pattern": "validation failed"
+}

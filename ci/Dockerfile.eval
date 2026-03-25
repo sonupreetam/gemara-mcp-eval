@@ -1,0 +1,34 @@
+FROM python:3.12-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl git make && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN curl -L https://github.com/cue-lang/cue/releases/download/v0.11.1/cue_v0.11.1_linux_amd64.tar.gz | \
+    tar xz -C /usr/local/bin cue
+
+WORKDIR /eval
+
+COPY eval/detllm/requirements.txt /tmp/detllm-req.txt
+COPY eval/deepeval/requirements.txt /tmp/deepeval-req.txt
+COPY eval/dfah/requirements.txt /tmp/dfah-req.txt
+COPY eval/mcp-eval/requirements.txt /tmp/mcp-eval-req.txt
+
+RUN pip install --no-cache-dir \
+    -r /tmp/detllm-req.txt \
+    -r /tmp/deepeval-req.txt \
+    -r /tmp/dfah-req.txt \
+    -r /tmp/mcp-eval-req.txt
+
+COPY eval/mcpevals/package.json /tmp/mcpevals/package.json
+RUN cd /tmp/mcpevals && npm install
+
+RUN npm install -g promptfoo
+
+COPY . /eval
+
+CMD ["make", "eval-all"]

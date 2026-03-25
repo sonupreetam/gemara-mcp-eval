@@ -1,0 +1,4 @@
+deepeval>=1.0.0
+pyyaml>=6.0
+pytest>=8.0.0
+pytest-json-report>=1.5.0

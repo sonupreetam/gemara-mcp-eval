@@ -1,0 +1,16 @@
+# Golden output: expected threats for K8s multi-tenant PII system
+# Used for Jaccard similarity comparison — order does not matter
+expected_threat_titles:
+  - "Data Exfiltration from Tenant Namespace"
+  - "Tenant Isolation Breach"
+  - "Unauthorized Access to PII"
+  - "Container Escape"
+  - "Lateral Movement Between Tenants"
+
+expected_threat_id_prefix: "K8S-PII.THR"
+
+expected_capabilities:
+  - "multi-tenant isolation"
+  - "data encryption"
+  - "access control"
+  - "network segmentation"
