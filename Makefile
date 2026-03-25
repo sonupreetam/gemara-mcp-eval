@@ -48,13 +48,13 @@ eval-deepeval: $(RESULTS_DIR)
 	cd $(EVAL_DIR)/deepeval && python3 -m pytest \
 		test_tool_selection.py test_determinism.py \
 		--tb=short -q \
-		--json-report=../../$(RESULTS_DIR)/deepeval.json
+		--json-report ../../$(RESULTS_DIR)/deepeval.json
 	@echo "==> DeepEval complete."
 
 eval-mcpevals: $(RESULTS_DIR)
 	@echo "==> Running MCP Evals..."
 	cd $(EVAL_DIR)/mcpevals && npx ts-node eval-suite.ts \
-		--output ../../$(RESULTS_DIR)/mcpevals.json
+		--output=../../$(RESULTS_DIR)/mcpevals.json
 	@echo "==> MCP Evals complete."
 
 eval-mcp-eval: $(RESULTS_DIR)

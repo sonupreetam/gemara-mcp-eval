@@ -76,7 +76,17 @@ def assess_tool(tool: str, data: dict) -> dict:
             assessment["nfr6_contribution"] = "pass" if score >= NFR6_THRESHOLD else "fail"
             assessment["details"] = {"passed": passed, "total": len(results)}
 
-    elif tool in ("mcpevals", "mcp-eval", "deepeval"):
+    elif tool == "deepeval":
+        summary = data.get("summary", {})
+        passed = summary.get("passed", data.get("passed", 0))
+        total = summary.get("total", data.get("total", 0))
+        if total > 0:
+            score = passed / total
+            assessment["determinism_score"] = score
+            assessment["nfr6_contribution"] = "pass" if score >= NFR6_THRESHOLD else "fail"
+            assessment["details"] = {"passed": passed, "total": total, "note": data.get("note", "")}
+
+    elif tool in ("mcpevals", "mcp-eval"):
         passed = data.get("passed", 0)
         total = data.get("total", data.get("total_scenarios", 0))
         pending = data.get("pending", 0)

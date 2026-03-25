@@ -1,7 +1,7 @@
 /**
  * MCP Evals evaluation suite for gemara-mcp.
  *
- * Uses a local Ollama instance to score gemara-mcp tool outputs against expected behavior.
+ * Uses a local Ollama instance to score simulated gemara-mcp tool outputs.
  * Each evaluation is scored on accuracy, completeness, relevance, clarity, and reasoning.
  */
 
@@ -41,69 +41,43 @@ const evalCases: EvalCase[] = [
     id: "mce-001",
     description: "Validate a correct ControlCatalog",
     tool: "validate_gemara_artifact",
-    input: {
-      artifact_content: loadCorpusInput(
-        "inputs/tc-001-valid-control-catalog.yaml"
-      ),
-      definition: "#ControlCatalog",
-    },
-    expectedBehavior:
-      "Should return valid=true with no errors and a success message.",
+    input: { artifact_content: loadCorpusInput("inputs/tc-001-valid-control-catalog.yaml"), definition: "#ControlCatalog" },
+    expectedBehavior: "Should return valid=true with no errors and a success message.",
   },
   {
     id: "mce-002",
     description: "Validate an invalid ControlCatalog with missing group",
     tool: "validate_gemara_artifact",
-    input: {
-      artifact_content: loadCorpusInput(
-        "inputs/tc-002-invalid-missing-group.yaml"
-      ),
-      definition: "#ControlCatalog",
-    },
-    expectedBehavior:
-      "Should return valid=false with errors mentioning the missing group reference.",
+    input: { artifact_content: loadCorpusInput("inputs/tc-002-invalid-missing-group.yaml"), definition: "#ControlCatalog" },
+    expectedBehavior: "Should return valid=false with errors mentioning the missing group reference.",
   },
   {
     id: "mce-003",
     description: "Validate a correct ThreatCatalog",
     tool: "validate_gemara_artifact",
-    input: {
-      artifact_content: loadCorpusInput(
-        "inputs/tc-003-valid-threat-catalog.yaml"
-      ),
-      definition: "#ThreatCatalog",
-    },
-    expectedBehavior:
-      "Should return valid=true with no errors and a success message.",
+    input: { artifact_content: loadCorpusInput("inputs/tc-003-valid-threat-catalog.yaml"), definition: "#ThreatCatalog" },
+    expectedBehavior: "Should return valid=true with no errors and a success message.",
   },
   {
     id: "mce-004",
     description: "Detect type mismatch when validating wrong schema",
     tool: "validate_gemara_artifact",
-    input: {
-      artifact_content: loadCorpusInput(
-        "inputs/tc-004-invalid-wrong-type.yaml"
-      ),
-      definition: "#ThreatCatalog",
-    },
-    expectedBehavior:
-      "Should return valid=false because the artifact declares ControlCatalog but is validated against ThreatCatalog.",
+    input: { artifact_content: loadCorpusInput("inputs/tc-004-invalid-wrong-type.yaml"), definition: "#ThreatCatalog" },
+    expectedBehavior: "Should return valid=false because the artifact declares ControlCatalog but is validated against ThreatCatalog.",
   },
   {
     id: "mce-010",
     description: "Retrieve schema definitions for latest version",
     tool: "resource:gemara://schema/definitions",
     input: {},
-    expectedBehavior:
-      "Should return CUE schema definitions including ControlCatalog, ThreatCatalog, and other artifact types.",
+    expectedBehavior: "Should return CUE schema definitions including ControlCatalog, ThreatCatalog, and other artifact types.",
   },
   {
     id: "mce-011",
     description: "Retrieve Gemara lexicon",
     tool: "resource:gemara://lexicon",
     input: {},
-    expectedBehavior:
-      "Should return term definitions for the Gemara security model vocabulary.",
+    expectedBehavior: "Should return term definitions for the Gemara security model vocabulary.",
   },
 ];
 
@@ -127,51 +101,40 @@ function ollamaGenerate(prompt: string): Promise<string> {
         res.on("data", (chunk: Buffer) => (data += chunk.toString()));
         res.on("end", () => {
           try {
-            const parsed = JSON.parse(data);
-            resolve(parsed.response || "");
+            resolve(JSON.parse(data).response || "");
           } catch {
-            reject(new Error(`Failed to parse Ollama response: ${data.slice(0, 200)}`));
+            reject(new Error(`Parse error: ${data.slice(0, 200)}`));
           }
         });
       }
     );
     req.on("error", reject);
-    req.setTimeout(300000, () => { req.destroy(); reject(new Error("Ollama request timeout")); });
+    req.setTimeout(300000, () => { req.destroy(); reject(new Error("Ollama timeout")); });
     req.write(payload);
     req.end();
   });
 }
 
-async function scoreWithOllama(
-  evalCase: EvalCase,
-  simulatedOutput: string
-): Promise<Scores> {
-  const prompt = `You are evaluating an MCP tool call result. Score the following on a scale of 1-5 for each metric.
+async function scoreWithOllama(evalCase: EvalCase, simulatedOutput: string): Promise<Scores> {
+  const inputSummary = evalCase.input.artifact_content
+    ? `artifact (${(evalCase.input.artifact_content as string).length} chars), definition=${evalCase.input.definition}`
+    : JSON.stringify(evalCase.input);
+
+  const prompt = `You are evaluating an MCP tool call result. Score on a scale of 1-5.
 
 Tool: ${evalCase.tool}
-Input: ${JSON.stringify(evalCase.input, null, 2)}
-Expected behavior: ${evalCase.expectedBehavior}
-Actual output: ${simulatedOutput}
+Input summary: ${inputSummary}
+Expected: ${evalCase.expectedBehavior}
+Output: ${simulatedOutput}
 
-Score each metric (1=worst, 5=best):
-- accuracy: How correct is the output?
-- completeness: Does the output cover all expected aspects?
-- relevance: Is the output relevant to the request?
-- clarity: Is the output clear and well-structured?
-- reasoning: Does the output demonstrate sound reasoning?
-
-Respond ONLY with a JSON object like: {"accuracy": N, "completeness": N, "relevance": N, "clarity": N, "reasoning": N}`;
+Score each (1=worst, 5=best): accuracy, completeness, relevance, clarity, reasoning.
+Respond ONLY with JSON: {"accuracy": N, "completeness": N, "relevance": N, "clarity": N, "reasoning": N}`;
 
   const text = await ollamaGenerate(prompt);
-
   try {
     const match = text.match(/\{[\s\S]*?\}/);
-    if (match) {
-      return JSON.parse(match[0]) as Scores;
-    }
-  } catch {
-    // Fall through to defaults
-  }
+    if (match) return JSON.parse(match[0]) as Scores;
+  } catch { /* fall through */ }
   return { accuracy: 0, completeness: 0, relevance: 0, clarity: 0, reasoning: 0 };
 }
 
@@ -182,7 +145,6 @@ async function runEvaluation(): Promise<void> {
     : path.resolve(__dirname, "../../results/mcpevals.json");
 
   console.log(`MCP Evals: Running ${evalCases.length} evaluations...`);
-  console.log(`Server: ${config.mcpServer.name}`);
   console.log(`Model: ${config.evaluation.model} (Ollama)`);
 
   const results = [];
@@ -190,7 +152,7 @@ async function runEvaluation(): Promise<void> {
   for (const evalCase of evalCases) {
     console.log(`  [${evalCase.id}] ${evalCase.description}`);
 
-    const simulatedOutput = `[Simulated] Tool ${evalCase.tool} called with ${JSON.stringify(evalCase.input)}. Expected: ${evalCase.expectedBehavior}`;
+    const simulatedOutput = `Tool ${evalCase.tool} called. Expected: ${evalCase.expectedBehavior}`;
 
     try {
       const scores = await scoreWithOllama(evalCase, simulatedOutput);
@@ -202,27 +164,17 @@ async function runEvaluation(): Promise<void> {
         id: evalCase.id,
         description: evalCase.description,
         tool: evalCase.tool,
-        expectedBehavior: evalCase.expectedBehavior,
         scores,
         status: allAboveThreshold ? "passed" : "failed",
-        message: allAboveThreshold
-          ? "All metrics above threshold"
-          : `Some metrics below ${config.evaluation.threshold}`,
+        message: allAboveThreshold ? "All metrics above threshold" : `Some metrics below ${config.evaluation.threshold}`,
       });
-
-      console.log(
-        `    ${allAboveThreshold ? "PASS" : "FAIL"}: ${JSON.stringify(scores)}`
-      );
+      console.log(`    ${allAboveThreshold ? "PASS" : "FAIL"}: ${JSON.stringify(scores)}`);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       results.push({
-        id: evalCase.id,
-        description: evalCase.description,
-        tool: evalCase.tool,
-        expectedBehavior: evalCase.expectedBehavior,
+        id: evalCase.id, description: evalCase.description, tool: evalCase.tool,
         scores: { accuracy: 0, completeness: 0, relevance: 0, clarity: 0, reasoning: 0 },
-        status: "error",
-        message: errorMsg,
+        status: "error", message: errorMsg,
       });
       console.log(`    ERROR: ${errorMsg}`);
     }
@@ -240,14 +192,10 @@ async function runEvaluation(): Promise<void> {
   };
 
   const dir = path.dirname(outputPath);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(outputPath, JSON.stringify(summary, null, 2));
   console.log(`\nResults written to ${outputPath}`);
-  console.log(
-    `Summary: ${summary.passed} passed, ${summary.failed} failed, ${summary.errors} errors`
-  );
+  console.log(`Summary: ${summary.passed} passed, ${summary.failed} failed, ${summary.errors} errors`);
 }
 
 runEvaluation().catch(console.error);

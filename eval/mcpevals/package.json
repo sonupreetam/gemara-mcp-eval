@@ -7,10 +7,12 @@
     "eval": "ts-node eval-suite.ts",
     "eval:ci": "ts-node eval-suite.ts --output ../../results/mcpevals.json"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.28.0"
+  },
   "devDependencies": {
+    "@types/node": "^20.0.0",
     "ts-node": "^10.9.0",
-    "typescript": "^5.0.0",
-    "@types/node": "^20.0.0"
+    "typescript": "^5.0.0"
   }
 }
