@@ -1,0 +1,30 @@
+metadata:
+  id: EVAL-WRONGTYPE
+  type: ControlCatalog
+  gemara-version: "1.0"
+  description: |
+    This artifact declares metadata type ControlCatalog but is validated
+    against ThreatCatalog, which should produce a type mismatch error.
+  author:
+    id: eval-harness
+    name: Evaluation Harness
+    type: Software
+title: Wrong Type Artifact
+groups:
+  - id: data-protection
+    title: Data Protection
+    description: Controls ensuring data confidentiality and integrity.
+controls:
+  - id: EVAL-WRONGTYPE.C01
+    group: data-protection
+    title: Placeholder Control
+    state: Active
+    objective: |
+      This control exists only to test type mismatch detection.
+    assessment-requirements:
+      - id: EVAL-WRONGTYPE.C01.TR01
+        state: Active
+        text: |
+          When invoked, the service MUST verify the artifact type matches.
+        applicability:
+          - all

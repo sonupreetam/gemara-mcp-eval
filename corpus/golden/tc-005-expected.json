@@ -1,0 +1,5 @@
+{
+  "valid": false,
+  "errors_must_contain": [],
+  "message_pattern": "artifact_content is required"
+}

@@ -1,0 +1,12 @@
+expected_control_titles:
+  - "Protect Log Integrity"
+  - "Restrict Log Access"
+  - "Enforce Log Retention Policy"
+  - "Prevent Log Deletion"
+  - "Enable Tamper-Evident Logging"
+
+expected_control_id_prefix: "AUDIT.C"
+
+expected_families:
+  - "audit-logging"
+  - "data-protection"

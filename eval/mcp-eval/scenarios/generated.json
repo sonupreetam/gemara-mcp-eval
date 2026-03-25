@@ -1,0 +1,422 @@
+[
+  {
+    "id": "tc-001",
+    "name": "Validate valid Layer 2 ControlCatalog",
+    "steps": [
+      {
+        "action": "call_tool",
+        "tool": "validate_gemara_artifact",
+        "arguments": {
+          "artifact_content": "metadata:\n  id: EVAL-CC\n  type: ControlCatalog\n  gemara-version: \"1.0\"\n  description: |\n    A minimal but valid control catalog for determinism evaluation.\n  author:\n    id: eval-harness\n    name: Evaluation Harness\n    type: Software\n  mapping-references:\n    - id: CCC\n      title: FINOS Cloud Control Catalog\n      version: \"2025.01\"\n      url: https://github.com/finos/common-cloud-controls\n      description: FINOS CCC control framework\n  applicability-groups:\n    - id: standard\n      title: Standard\n      description: Applies to all standard deployments.\ntitle: Evaluation Control Catalog\ngroups:\n  - id: data-protection\n    title: Data Protection\n    description: Controls ensuring data confidentiality and integrity.\ncontrols:\n  - id: EVAL-CC.C01\n    group: data-protection\n    title: Enforce Encryption in Transit\n    state: Active\n    objective: |\n      Ensure all network communication uses TLS 1.2 or higher to prevent\n      interception of data in transit.\n    threats:\n      - reference-id: CCC\n        entries:\n          - reference-id: CCC.TH02\n            remarks: Data is intercepted in transit\n    assessment-requirements:\n      - id: EVAL-CC.C01.TR01\n        state: Active\n        text: |\n          When a port is exposed for network traffic, the service MUST\n          require TLS 1.2 or higher for all connections.\n        applicability:\n          - standard\n",
+          "definition": "#ControlCatalog"
+        },
+        "assertions": [
+          {
+            "type": "json_path",
+            "path": "$.valid",
+            "expected": true
+          }
+        ]
+      }
+    ],
+    "determinism": {
+      "runs": 20,
+      "match_type": "exact",
+      "threshold": 1.0
+    }
+  },
+  {
+    "id": "tc-002",
+    "name": "Validate ControlCatalog missing required group",
+    "steps": [
+      {
+        "action": "call_tool",
+        "tool": "validate_gemara_artifact",
+        "arguments": {
+          "artifact_content": "metadata:\n  id: EVAL-BAD\n  type: ControlCatalog\n  gemara-version: \"1.0\"\n  description: |\n    A control catalog with a control referencing a non-existent group.\n  author:\n    id: eval-harness\n    name: Evaluation Harness\n    type: Software\ntitle: Invalid Control Catalog\ngroups:\n  - id: data-protection\n    title: Data Protection\n    description: Controls ensuring data confidentiality and integrity.\ncontrols:\n  - id: EVAL-BAD.C01\n    group: nonexistent-group\n    title: Broken Control\n    state: Active\n    objective: |\n      This control references a group that does not exist in the groups list.\n    assessment-requirements:\n      - id: EVAL-BAD.C01.TR01\n        state: Active\n        text: |\n          When invoked, the service MUST respond within 5 seconds.\n        applicability:\n          - standard\n",
+          "definition": "#ControlCatalog"
+        },
+        "assertions": [
+          {
+            "type": "json_path",
+            "path": "$.valid",
+            "expected": false
+          }
+        ]
+      }
+    ],
+    "determinism": {
+      "runs": 20,
+      "match_type": "exact",
+      "threshold": 1.0
+    }
+  },
+  {
+    "id": "tc-003",
+    "name": "Validate valid Layer 2 ThreatCatalog",
+    "steps": [
+      {
+        "action": "call_tool",
+        "tool": "validate_gemara_artifact",
+        "arguments": {
+          "artifact_content": "metadata:\n  id: EVAL-TC\n  type: ThreatCatalog\n  gemara-version: \"1.0\"\n  description: |\n    A minimal but valid threat catalog for determinism evaluation.\n  author:\n    id: eval-harness\n    name: Evaluation Harness\n    type: Software\n  mapping-references:\n    - id: EVAL-CC\n      title: Evaluation Control Catalog\n      version: \"1.0.0\"\n      url: https://example.com/eval-cc\n      description: Control catalog used as a reference for capability mappings\ntitle: Evaluation Threat Catalog\ngroups:\n  - id: data-threats\n    title: Data Threats\n    description: Threats related to data confidentiality and integrity.\nthreats:\n  - id: EVAL-TC.THR01\n    group: data-threats\n    title: Data Intercepted in Transit\n    description: |\n      An adversary intercepts unencrypted network traffic to read or\n      modify data being transmitted between services.\n    capabilities:\n      - reference-id: EVAL-CC\n        entries:\n          - reference-id: EVAL-CC.C01\n            remarks: Encryption in transit mitigates interception\n",
+          "definition": "#ThreatCatalog"
+        },
+        "assertions": [
+          {
+            "type": "json_path",
+            "path": "$.valid",
+            "expected": true
+          }
+        ]
+      }
+    ],
+    "determinism": {
+      "runs": 20,
+      "match_type": "exact",
+      "threshold": 1.0
+    }
+  },
+  {
+    "id": "tc-004",
+    "name": "Validate ThreatCatalog with wrong metadata type",
+    "steps": [
+      {
+        "action": "call_tool",
+        "tool": "validate_gemara_artifact",
+        "arguments": {
+          "artifact_content": "metadata:\n  id: EVAL-WRONGTYPE\n  type: ControlCatalog\n  gemara-version: \"1.0\"\n  description: |\n    This artifact declares metadata type ControlCatalog but is validated\n    against ThreatCatalog, which should produce a type mismatch error.\n  author:\n    id: eval-harness\n    name: Evaluation Harness\n    type: Software\ntitle: Wrong Type Artifact\ngroups:\n  - id: data-protection\n    title: Data Protection\n    description: Controls ensuring data confidentiality and integrity.\ncontrols:\n  - id: EVAL-WRONGTYPE.C01\n    group: data-protection\n    title: Placeholder Control\n    state: Active\n    objective: |\n      This control exists only to test type mismatch detection.\n    assessment-requirements:\n      - id: EVAL-WRONGTYPE.C01.TR01\n        state: Active\n        text: |\n          When invoked, the service MUST verify the artifact type matches.\n        applicability:\n          - all\n",
+          "definition": "#ThreatCatalog"
+        },
+        "assertions": [
+          {
+            "type": "json_path",
+            "path": "$.valid",
+            "expected": false
+          }
+        ]
+      }
+    ],
+    "determinism": {
+      "runs": 20,
+      "match_type": "exact",
+      "threshold": 1.0
+    }
+  },
+  {
+    "id": "tc-005",
+    "name": "Validate empty artifact content",
+    "steps": [
+      {
+        "action": "call_tool",
+        "tool": "validate_gemara_artifact",
+        "arguments": {
+          "artifact_content": "\n",
+          "definition": "#ControlCatalog"
+        },
+        "assertions": [
+          {
+            "type": "json_path",
+            "path": "$.valid",
+            "expected": false
+          }
+        ]
+      }
+    ],
+    "determinism": {
+      "runs": 20,
+      "match_type": "exact",
+      "threshold": 1.0
+    }
+  },
+  {
+    "id": "tc-010",
+    "name": "Threat assessment for Kubernetes multi-tenant PII system",
+    "steps": [
+      {
+        "action": "invoke_prompt",
+        "prompt": "threat_assessment",
+        "arguments": {
+          "COMPONENT": "Multi-tenant Kubernetes PII Processing Platform",
+          "ID_PREFIX": "K8S-PII"
+        },
+        "assertions": [
+          {
+            "type": "contains_any",
+            "values": [
+              "data exfiltration",
+              "tenant isolation breach",
+              "unauthorized access"
+            ]
+          }
+        ]
+      }
+    ],
+    "determinism": {
+      "runs": 20,
+      "match_type": "jaccard",
+      "threshold": 0.8
+    }
+  },
+  {
+    "id": "tc-011",
+    "name": "Threat assessment for CI/CD pipeline with unsigned images",
+    "steps": [
+      {
+        "action": "invoke_prompt",
+        "prompt": "threat_assessment",
+        "arguments": {
+          "COMPONENT": "CI/CD Pipeline with Container Registry",
+          "ID_PREFIX": "CICD"
+        },
+        "assertions": [
+          {
+            "type": "contains_any",
+            "values": [
+              "supply chain compromise",
+              "image tampering",
+              "malicious dependency"
+            ]
+          }
+        ]
+      }
+    ],
+    "determinism": {
+      "runs": 20,
+      "match_type": "jaccard",
+      "threshold": 0.8
+    }
+  },
+  {
+    "id": "tc-012",
+    "name": "Threat assessment for object storage service",
+    "steps": [
+      {
+        "action": "invoke_prompt",
+        "prompt": "threat_assessment",
+        "arguments": {
+          "COMPONENT": "Cloud Object Storage Service",
+          "ID_PREFIX": "OBJ-STORE"
+        },
+        "assertions": [
+          {
+            "type": "contains_any",
+            "values": [
+              "data loss",
+              "unauthorized access",
+              "data replication to untrusted location"
+            ]
+          }
+        ]
+      }
+    ],
+    "determinism": {
+      "runs": 20,
+      "match_type": "jaccard",
+      "threshold": 0.8
+    }
+  },
+  {
+    "id": "tc-013",
+    "name": "Threat assessment for API gateway",
+    "steps": [
+      {
+        "action": "invoke_prompt",
+        "prompt": "threat_assessment",
+        "arguments": {
+          "COMPONENT": "Public-facing API Gateway",
+          "ID_PREFIX": "APIGW"
+        },
+        "assertions": [
+          {
+            "type": "contains_any",
+            "values": [
+              "denial of service",
+              "injection attack",
+              "authentication bypass"
+            ]
+          }
+        ]
+      }
+    ],
+    "determinism": {
+      "runs": 20,
+      "match_type": "jaccard",
+      "threshold": 0.8
+    }
+  },
+  {
+    "id": "tc-014",
+    "name": "Threat assessment for secrets management vault",
+    "steps": [
+      {
+        "action": "invoke_prompt",
+        "prompt": "threat_assessment",
+        "arguments": {
+          "COMPONENT": "Centralized Secrets Management Vault",
+          "ID_PREFIX": "VAULT"
+        },
+        "assertions": [
+          {
+            "type": "contains_any",
+            "values": [
+              "credential theft",
+              "unauthorized secret access",
+              "key compromise"
+            ]
+          }
+        ]
+      }
+    ],
+    "determinism": {
+      "runs": 20,
+      "match_type": "jaccard",
+      "threshold": 0.8
+    }
+  },
+  {
+    "id": "tc-020",
+    "name": "Control catalog for Kubernetes workload protection",
+    "steps": [
+      {
+        "action": "invoke_prompt",
+        "prompt": "control_catalog",
+        "arguments": {
+          "COMPONENT": "Kubernetes Workload Protection",
+          "ID_PREFIX": "K8S-WP"
+        },
+        "assertions": [
+          {
+            "type": "contains_any",
+            "values": [
+              "encryption in transit",
+              "network policy enforcement",
+              "pod security"
+            ]
+          }
+        ]
+      }
+    ],
+    "determinism": {
+      "runs": 20,
+      "match_type": "jaccard",
+      "threshold": 0.8
+    }
+  },
+  {
+    "id": "tc-021",
+    "name": "Control catalog for logging and audit",
+    "steps": [
+      {
+        "action": "invoke_prompt",
+        "prompt": "control_catalog",
+        "arguments": {
+          "COMPONENT": "Enterprise Audit Logging Platform",
+          "ID_PREFIX": "AUDIT"
+        },
+        "assertions": [
+          {
+            "type": "contains_any",
+            "values": [
+              "log integrity",
+              "log access restriction",
+              "log retention"
+            ]
+          }
+        ]
+      }
+    ],
+    "determinism": {
+      "runs": 20,
+      "match_type": "jaccard",
+      "threshold": 0.8
+    }
+  },
+  {
+    "id": "tc-022",
+    "name": "Control catalog for identity and access management",
+    "steps": [
+      {
+        "action": "invoke_prompt",
+        "prompt": "control_catalog",
+        "arguments": {
+          "COMPONENT": "Cloud IAM Service",
+          "ID_PREFIX": "IAM"
+        },
+        "assertions": [
+          {
+            "type": "contains_any",
+            "values": [
+              "multi-factor authentication",
+              "least privilege",
+              "credential rotation"
+            ]
+          }
+        ]
+      }
+    ],
+    "determinism": {
+      "runs": 20,
+      "match_type": "jaccard",
+      "threshold": 0.8
+    }
+  },
+  {
+    "id": "tc-023",
+    "name": "Control catalog for data encryption service",
+    "steps": [
+      {
+        "action": "invoke_prompt",
+        "prompt": "control_catalog",
+        "arguments": {
+          "COMPONENT": "Data Encryption Key Management Service",
+          "ID_PREFIX": "ENC-KMS"
+        },
+        "assertions": [
+          {
+            "type": "contains_any",
+            "values": [
+              "encryption at rest",
+              "key rotation",
+              "key access control"
+            ]
+          }
+        ]
+      }
+    ],
+    "determinism": {
+      "runs": 20,
+      "match_type": "jaccard",
+      "threshold": 0.8
+    }
+  },
+  {
+    "id": "tc-024",
+    "name": "Control catalog for container image supply chain",
+    "steps": [
+      {
+        "action": "invoke_prompt",
+        "prompt": "control_catalog",
+        "arguments": {
+          "COMPONENT": "Container Image Build and Distribution Pipeline",
+          "ID_PREFIX": "IMG-SC"
+        },
+        "assertions": [
+          {
+            "type": "contains_any",
+            "values": [
+              "image signing",
+              "vulnerability scanning",
+              "base image provenance"
+            ]
+          }
+        ]
+      }
+    ],
+    "determinism": {
+      "runs": 20,
+      "match_type": "jaccard",
+      "threshold": 0.8
+    }
+  }
+]

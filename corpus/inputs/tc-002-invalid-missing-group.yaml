@@ -1,0 +1,29 @@
+metadata:
+  id: EVAL-BAD
+  type: ControlCatalog
+  gemara-version: "1.0"
+  description: |
+    A control catalog with a control referencing a non-existent group.
+  author:
+    id: eval-harness
+    name: Evaluation Harness
+    type: Software
+title: Invalid Control Catalog
+groups:
+  - id: data-protection
+    title: Data Protection
+    description: Controls ensuring data confidentiality and integrity.
+controls:
+  - id: EVAL-BAD.C01
+    group: nonexistent-group
+    title: Broken Control
+    state: Active
+    objective: |
+      This control references a group that does not exist in the groups list.
+    assessment-requirements:
+      - id: EVAL-BAD.C01.TR01
+        state: Active
+        text: |
+          When invoked, the service MUST respond within 5 seconds.
+        applicability:
+          - standard

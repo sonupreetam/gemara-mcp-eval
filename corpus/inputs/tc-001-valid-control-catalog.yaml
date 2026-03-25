@@ -1,0 +1,46 @@
+metadata:
+  id: EVAL-CC
+  type: ControlCatalog
+  gemara-version: "1.0"
+  description: |
+    A minimal but valid control catalog for determinism evaluation.
+  author:
+    id: eval-harness
+    name: Evaluation Harness
+    type: Software
+  mapping-references:
+    - id: CCC
+      title: FINOS Cloud Control Catalog
+      version: "2025.01"
+      url: https://github.com/finos/common-cloud-controls
+      description: FINOS CCC control framework
+  applicability-groups:
+    - id: standard
+      title: Standard
+      description: Applies to all standard deployments.
+title: Evaluation Control Catalog
+groups:
+  - id: data-protection
+    title: Data Protection
+    description: Controls ensuring data confidentiality and integrity.
+controls:
+  - id: EVAL-CC.C01
+    group: data-protection
+    title: Enforce Encryption in Transit
+    state: Active
+    objective: |
+      Ensure all network communication uses TLS 1.2 or higher to prevent
+      interception of data in transit.
+    threats:
+      - reference-id: CCC
+        entries:
+          - reference-id: CCC.TH02
+            remarks: Data is intercepted in transit
+    assessment-requirements:
+      - id: EVAL-CC.C01.TR01
+        state: Active
+        text: |
+          When a port is exposed for network traffic, the service MUST
+          require TLS 1.2 or higher for all connections.
+        applicability:
+          - standard

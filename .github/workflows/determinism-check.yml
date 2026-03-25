@@ -1,0 +1,87 @@
+name: Determinism Evaluation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1" # Weekly Monday 6am UTC
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout with submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install CUE
+        run: |
+          curl -L https://github.com/cue-lang/cue/releases/download/v0.11.1/cue_v0.11.1_linux_amd64.tar.gz | \
+            sudo tar xz -C /usr/local/bin cue
+
+      - name: Install Python dependencies
+        run: |
+          pip install -r eval/detllm/requirements.txt
+          pip install -r eval/deepeval/requirements.txt
+          pip install -r eval/dfah/requirements.txt
+          pip install -r eval/mcp-eval/requirements.txt
+
+      - name: Install Node.js dependencies
+        run: |
+          cd eval/mcpevals && npm install
+          npm install -g promptfoo
+
+      - name: Validate corpus
+        run: make corpus-validate
+
+      - name: Start gemara-mcp server
+        run: |
+          docker compose up -d
+          sleep 5
+
+      - name: Run all evaluations
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: make eval-all
+
+      - name: Generate NFR6 report
+        run: make report
+
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: evaluation-results
+          path: results/
+
+      - name: Check NFR6 threshold
+        run: |
+          python -c "
+          import json, sys
+          with open('results/nfr6-report.json') as f:
+              report = json.load(f)
+          verdict = report['nfr6_report']['nfr6_verdict']
+          score = report['nfr6_report']['overall_determinism_score']
+          print(f'NFR6: {verdict} (score: {score:.1%})')
+          sys.exit(0 if verdict == 'PASS' else 1)
+          "
+
+      - name: Stop gemara-mcp server
+        if: always()
+        run: docker compose down

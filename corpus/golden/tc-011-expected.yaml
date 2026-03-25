@@ -1,0 +1,14 @@
+expected_threat_titles:
+  - "Supply Chain Compromise via Malicious Base Image"
+  - "Container Image Tampering"
+  - "Malicious Dependency Injection"
+  - "Unauthorized Pipeline Execution"
+  - "Credential Leakage in Build Artifacts"
+
+expected_threat_id_prefix: "CICD.THR"
+
+expected_capabilities:
+  - "image building"
+  - "dependency resolution"
+  - "artifact distribution"
+  - "pipeline orchestration"

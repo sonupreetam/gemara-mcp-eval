@@ -1,0 +1,12 @@
+expected_control_titles:
+  - "Enforce Image Signing"
+  - "Enforce Vulnerability Scanning"
+  - "Verify Base Image Provenance"
+  - "Restrict Registry Sources"
+  - "Enforce SBOM Generation"
+
+expected_control_id_prefix: "IMG-SC.C"
+
+expected_families:
+  - "supply-chain"
+  - "image-integrity"

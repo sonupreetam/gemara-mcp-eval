@@ -1,0 +1,14 @@
+expected_threat_titles:
+  - "Denial of Service"
+  - "Injection Attack"
+  - "Authentication Bypass"
+  - "Rate Limiting Evasion"
+  - "API Key Compromise"
+
+expected_threat_id_prefix: "APIGW.THR"
+
+expected_capabilities:
+  - "request routing"
+  - "authentication"
+  - "rate limiting"
+  - "input validation"

@@ -1,0 +1,225 @@
+description: "gemara-mcp determinism evaluation suite (NFR6)"
+
+prompts:
+  - id: validate-artifact
+    raw: |
+      Validate the following YAML artifact against the Gemara {{definition}} schema.
+      Return the validation result as JSON with fields: valid (boolean), errors (array), message (string).
+
+      Artifact content:
+      ```yaml
+      {{artifact_content}}
+      ```
+
+  - id: threat-assessment
+    raw: |
+      I want to create a threat assessment for **{{component}}** using the ID prefix **{{id_prefix}}**.
+      Use FINOS CCC Core as the default mapping reference.
+      Author: id "eval-harness", name "Evaluation Harness", type "Software Assisted".
+      Skip MITRE ATT&CK vectors.
+      Identify capabilities, then threats. Produce a complete valid Gemara ThreatCatalog YAML artifact.
+      Return ONLY the final YAML artifact.
+
+  - id: control-catalog
+    raw: |
+      I want to create a control catalog for **{{component}}** using the ID prefix **{{id_prefix}}**.
+      Use FINOS CCC Core as mapping reference. Author: id "eval-harness", name "Evaluation Harness", type "Software Assisted".
+      Guideline frameworks: NIST SP 800-53, NIST CSF.
+      Applicability: id "standard", title "Standard", description "Applies to all standard deployments."
+      Define families, controls with threat/guideline mappings, and assessment requirements.
+      Return ONLY the final YAML artifact.
+
+providers:
+  - id: ollama:chat:qwen2.5:7b
+    config:
+      temperature: 0
+
+defaultTest:
+  options:
+    runSerially: true
+
+tests:
+  # --- Dimension 1: validate_gemara_artifact ---
+
+  - description: "tc-001: Valid ControlCatalog passes validation"
+    vars:
+      definition: "#ControlCatalog"
+      artifact_content: "file://../../corpus/inputs/tc-001-valid-control-catalog.yaml"
+    assert:
+      - type: contains
+        value: "valid"
+      - type: contains
+        value: "true"
+
+  - description: "tc-002: Missing group causes validation failure"
+    vars:
+      definition: "#ControlCatalog"
+      artifact_content: "file://../../corpus/inputs/tc-002-invalid-missing-group.yaml"
+    assert:
+      - type: contains
+        value: "false"
+      - type: icontains
+        value: "group"
+
+  - description: "tc-003: Valid ThreatCatalog passes validation"
+    vars:
+      definition: "#ThreatCatalog"
+      artifact_content: "file://../../corpus/inputs/tc-003-valid-threat-catalog.yaml"
+    assert:
+      - type: contains
+        value: "valid"
+      - type: contains
+        value: "true"
+
+  - description: "tc-004: Wrong metadata type fails ThreatCatalog validation"
+    vars:
+      definition: "#ThreatCatalog"
+      artifact_content: "file://../../corpus/inputs/tc-004-invalid-wrong-type.yaml"
+    assert:
+      - type: contains
+        value: "false"
+
+  - description: "tc-005: Empty input fails validation"
+    vars:
+      definition: "#ControlCatalog"
+      artifact_content: ""
+    assert:
+      - type: contains
+        value: "false"
+
+  # --- Dimension 2: threat_assessment ---
+
+  - description: "tc-010: K8s PII threat catalog contains expected threats"
+    prompt: threat-assessment
+    vars:
+      component: "Multi-tenant Kubernetes PII Processing Platform"
+      id_prefix: "K8S-PII"
+    assert:
+      - type: icontains
+        value: "exfiltration"
+      - type: icontains
+        value: "isolation"
+      - type: icontains
+        value: "ThreatCatalog"
+      - type: is-valid-yaml
+
+  - description: "tc-011: CI/CD threat catalog contains supply chain threats"
+    prompt: threat-assessment
+    vars:
+      component: "CI/CD Pipeline with Container Registry"
+      id_prefix: "CICD"
+    assert:
+      - type: icontains
+        value: "supply chain"
+      - type: icontains
+        value: "tamper"
+      - type: icontains
+        value: "ThreatCatalog"
+
+  - description: "tc-012: Object storage threat catalog"
+    prompt: threat-assessment
+    vars:
+      component: "Cloud Object Storage Service"
+      id_prefix: "OBJ-STORE"
+    assert:
+      - type: icontains
+        value: "data loss"
+      - type: icontains
+        value: "unauthorized"
+      - type: icontains
+        value: "ThreatCatalog"
+
+  - description: "tc-013: API gateway threat catalog"
+    prompt: threat-assessment
+    vars:
+      component: "Public-facing API Gateway"
+      id_prefix: "APIGW"
+    assert:
+      - type: icontains
+        value: "denial of service"
+      - type: icontains
+        value: "injection"
+      - type: icontains
+        value: "ThreatCatalog"
+
+  - description: "tc-014: Secrets vault threat catalog"
+    prompt: threat-assessment
+    vars:
+      component: "Centralized Secrets Management Vault"
+      id_prefix: "VAULT"
+    assert:
+      - type: icontains
+        value: "credential"
+      - type: icontains
+        value: "secret"
+      - type: icontains
+        value: "ThreatCatalog"
+
+  # --- Dimension 3: control_catalog ---
+
+  - description: "tc-020: K8s workload control catalog"
+    prompt: control-catalog
+    vars:
+      component: "Kubernetes Workload Protection"
+      id_prefix: "K8S-WP"
+    assert:
+      - type: icontains
+        value: "encryption"
+      - type: icontains
+        value: "network"
+      - type: icontains
+        value: "ControlCatalog"
+
+  - description: "tc-021: Audit logging control catalog"
+    prompt: control-catalog
+    vars:
+      component: "Enterprise Audit Logging Platform"
+      id_prefix: "AUDIT"
+    assert:
+      - type: icontains
+        value: "log"
+      - type: icontains
+        value: "integrity"
+      - type: icontains
+        value: "ControlCatalog"
+
+  - description: "tc-022: IAM control catalog"
+    prompt: control-catalog
+    vars:
+      component: "Cloud IAM Service"
+      id_prefix: "IAM"
+    assert:
+      - type: icontains
+        value: "multi-factor"
+      - type: icontains
+        value: "least privilege"
+      - type: icontains
+        value: "ControlCatalog"
+
+  - description: "tc-023: Encryption KMS control catalog"
+    prompt: control-catalog
+    vars:
+      component: "Data Encryption Key Management Service"
+      id_prefix: "ENC-KMS"
+    assert:
+      - type: icontains
+        value: "encryption"
+      - type: icontains
+        value: "key rotation"
+      - type: icontains
+        value: "ControlCatalog"
+
+  - description: "tc-024: Container image supply chain control catalog"
+    prompt: control-catalog
+    vars:
+      component: "Container Image Build and Distribution Pipeline"
+      id_prefix: "IMG-SC"
+    assert:
+      - type: icontains
+        value: "signing"
+      - type: icontains
+        value: "vulnerability"
+      - type: icontains
+        value: "ControlCatalog"
+
+outputPath: ../../results/promptfoo.json

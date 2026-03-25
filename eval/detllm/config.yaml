@@ -1,0 +1,17 @@
+# detLLM configuration for gemara-mcp determinism evaluation
+#
+# Measures raw LLM determinism in isolation (no MCP server involved).
+# Tests whether the LLM produces consistent outputs for compliance prompts.
+
+backend: ollama
+model: qwen2.5:7b
+ollama_base_url: http://localhost:11434
+
+tier: 1
+runs: 5
+batch_size: 1
+
+temperature: 0
+seed: 42
+
+output_dir: ../../results/detllm-artifacts

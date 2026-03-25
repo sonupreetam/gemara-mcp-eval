@@ -1,0 +1,87 @@
+[
+  {
+    "id": "cs-001",
+    "description": "Multi-tenant Kubernetes PII platform",
+    "input": "Create a control catalog for a multi-tenant Kubernetes platform that processes PII for healthcare customers.",
+    "component": "Multi-tenant Kubernetes PII Processing Platform",
+    "id_prefix": "K8S-PII",
+    "definition": "#ControlCatalog",
+    "match_type": "jaccard",
+    "expected_output": {
+      "controls": ["encryption in transit", "tenant isolation", "data access control", "audit logging", "data encryption at rest"],
+      "families": ["data-protection", "access-control", "network-security"]
+    },
+    "evidence": {
+      "framework": "FINOS CCC",
+      "relevant_controls": ["CCC.C01", "CCC.C06", "CCC.C08", "CCC.C09", "CCC.C10"]
+    }
+  },
+  {
+    "id": "cs-002",
+    "description": "Public-facing API gateway",
+    "input": "Create a control catalog for a public-facing API gateway handling financial transactions.",
+    "component": "Financial API Gateway",
+    "id_prefix": "APIGW",
+    "definition": "#ControlCatalog",
+    "match_type": "jaccard",
+    "expected_output": {
+      "controls": ["rate limiting", "input validation", "authentication", "encryption in transit", "audit logging"],
+      "families": ["access-control", "data-protection", "availability"]
+    },
+    "evidence": {
+      "framework": "FINOS CCC",
+      "relevant_controls": ["CCC.C01", "CCC.C09"]
+    }
+  },
+  {
+    "id": "cs-003",
+    "description": "Cloud object storage",
+    "input": "Create a control catalog for a cloud object storage service with cross-region replication.",
+    "component": "Cloud Object Storage Service",
+    "id_prefix": "OBJ-STORE",
+    "definition": "#ControlCatalog",
+    "match_type": "jaccard",
+    "expected_output": {
+      "controls": ["encryption at rest", "access policy", "data replication control", "region restriction", "log protection"],
+      "families": ["data-protection", "compliance"]
+    },
+    "evidence": {
+      "framework": "FINOS CCC",
+      "relevant_controls": ["CCC.C06", "CCC.C08", "CCC.C10"]
+    }
+  },
+  {
+    "id": "cs-004",
+    "description": "Secrets management vault",
+    "input": "Create a control catalog for a centralized secrets management vault used across production services.",
+    "component": "Centralized Secrets Management Vault",
+    "id_prefix": "VAULT",
+    "definition": "#ControlCatalog",
+    "match_type": "jaccard",
+    "expected_output": {
+      "controls": ["secret access control", "key rotation", "audit trail", "encryption", "credential lifecycle"],
+      "families": ["key-management", "access-control", "audit-logging"]
+    },
+    "evidence": {
+      "framework": "FINOS CCC",
+      "relevant_controls": ["CCC.C01", "CCC.C09"]
+    }
+  },
+  {
+    "id": "cs-005",
+    "description": "CI/CD pipeline",
+    "input": "Create a control catalog for a CI/CD pipeline that builds, signs, and distributes container images.",
+    "component": "Container Image Build and Distribution Pipeline",
+    "id_prefix": "IMG-SC",
+    "definition": "#ControlCatalog",
+    "match_type": "jaccard",
+    "expected_output": {
+      "controls": ["image signing", "vulnerability scanning", "base image provenance", "registry access control", "SBOM generation"],
+      "families": ["supply-chain", "image-integrity"]
+    },
+    "evidence": {
+      "framework": "SLSA",
+      "relevant_levels": ["L1", "L2", "L3"]
+    }
+  }
+]

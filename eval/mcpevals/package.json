@@ -1,0 +1,16 @@
+{
+  "name": "gemara-mcp-evals",
+  "version": "1.0.0",
+  "description": "MCP Evals suite for gemara-mcp determinism evaluation",
+  "private": true,
+  "scripts": {
+    "eval": "ts-node eval-suite.ts",
+    "eval:ci": "ts-node eval-suite.ts --output ../../results/mcpevals.json"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "ts-node": "^10.9.0",
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0"
+  }
+}

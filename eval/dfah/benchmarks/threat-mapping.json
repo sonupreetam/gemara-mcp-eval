@@ -1,0 +1,87 @@
+[
+  {
+    "id": "tm-001",
+    "description": "K8s multi-tenant PII threats",
+    "input": "Create a threat catalog for a multi-tenant Kubernetes platform processing PII.",
+    "component": "Multi-tenant Kubernetes PII Processing Platform",
+    "id_prefix": "K8S-PII",
+    "definition": "#ThreatCatalog",
+    "match_type": "jaccard",
+    "expected_output": {
+      "threats": ["data exfiltration", "tenant isolation breach", "container escape", "unauthorized access", "lateral movement"],
+      "capabilities": ["multi-tenant isolation", "data encryption", "access control", "network segmentation"]
+    },
+    "evidence": {
+      "framework": "FINOS CCC",
+      "relevant_threats": ["CCC.TH02", "CCC.TH03", "CCC.TH04", "CCC.TH06", "CCC.TH07"]
+    }
+  },
+  {
+    "id": "tm-002",
+    "description": "CI/CD supply chain threats",
+    "input": "Create a threat catalog for a CI/CD pipeline pulling base images from public registries without signing.",
+    "component": "CI/CD Pipeline with Container Registry",
+    "id_prefix": "CICD",
+    "definition": "#ThreatCatalog",
+    "match_type": "jaccard",
+    "expected_output": {
+      "threats": ["supply chain compromise", "image tampering", "malicious dependency", "credential leakage", "pipeline hijack"],
+      "capabilities": ["image building", "dependency resolution", "artifact distribution"]
+    },
+    "evidence": {
+      "framework": "MITRE ATT&CK",
+      "relevant_techniques": ["T1195", "T1059", "T1078"]
+    }
+  },
+  {
+    "id": "tm-003",
+    "description": "Object storage threats",
+    "input": "Create a threat catalog for a cloud object storage service with cross-region replication.",
+    "component": "Cloud Object Storage Service",
+    "id_prefix": "OBJ-STORE",
+    "definition": "#ThreatCatalog",
+    "match_type": "jaccard",
+    "expected_output": {
+      "threats": ["data loss", "unauthorized access", "data replication to untrusted location", "bucket misconfiguration", "data exfiltration"],
+      "capabilities": ["object storage", "access policy management", "data replication"]
+    },
+    "evidence": {
+      "framework": "FINOS CCC",
+      "relevant_threats": ["CCC.TH04", "CCC.TH06"]
+    }
+  },
+  {
+    "id": "tm-004",
+    "description": "API gateway threats",
+    "input": "Create a threat catalog for a public-facing API gateway.",
+    "component": "Public-facing API Gateway",
+    "id_prefix": "APIGW",
+    "definition": "#ThreatCatalog",
+    "match_type": "jaccard",
+    "expected_output": {
+      "threats": ["denial of service", "injection attack", "authentication bypass", "API key compromise", "data interception"],
+      "capabilities": ["request routing", "authentication", "rate limiting", "input validation"]
+    },
+    "evidence": {
+      "framework": "OWASP",
+      "relevant_risks": ["API1", "API2", "API3", "API4"]
+    }
+  },
+  {
+    "id": "tm-005",
+    "description": "Secrets vault threats",
+    "input": "Create a threat catalog for a centralized secrets management vault.",
+    "component": "Centralized Secrets Management Vault",
+    "id_prefix": "VAULT",
+    "definition": "#ThreatCatalog",
+    "match_type": "jaccard",
+    "expected_output": {
+      "threats": ["credential theft", "unauthorized secret access", "key compromise", "privilege escalation", "audit log tampering"],
+      "capabilities": ["secret storage", "access control", "audit logging", "key rotation"]
+    },
+    "evidence": {
+      "framework": "FINOS CCC",
+      "relevant_threats": ["CCC.TH07", "CCC.TH09"]
+    }
+  }
+]

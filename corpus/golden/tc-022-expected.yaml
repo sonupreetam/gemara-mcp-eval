@@ -1,0 +1,12 @@
+expected_control_titles:
+  - "Enforce Multi-Factor Authentication"
+  - "Enforce Least Privilege Access"
+  - "Enforce Credential Rotation"
+  - "Prevent Stale Account Access"
+  - "Monitor Authentication Anomalies"
+
+expected_control_id_prefix: "IAM.C"
+
+expected_families:
+  - "access-control"
+  - "authentication"
