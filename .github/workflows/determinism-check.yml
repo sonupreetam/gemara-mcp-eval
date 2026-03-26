@@ -15,11 +15,31 @@ jobs:
     permissions:
       contents: read
 
+    services:
+      ollama:
+        image: ollama/ollama:latest
+        ports:
+          - 11434:11434
+
     steps:
       - name: Checkout with submodules
         uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Pull Ollama model
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:11434/api/tags > /dev/null && break
+            echo "Waiting for Ollama to be ready... ($i)"
+            sleep 2
+          done
+          curl -sf http://localhost:11434/api/tags > /dev/null || \
+            { echo "Ollama never became ready"; exit 1; }
+          echo "Pulling qwen2.5:7b model..."
+          curl -sf http://localhost:11434/api/pull \
+            -d '{"name":"qwen2.5:7b"}' | tail -1
+          echo "Model pull complete."
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -63,7 +83,8 @@ jobs:
 
       - name: Run all evaluations
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OLLAMA_BASE_URL: http://localhost:11434
+          OLLAMA_MODEL: qwen2.5:7b
         run: make eval-all
 
       - name: Generate NFR6 report
