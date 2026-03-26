@@ -7,7 +7,9 @@ and exact match for validation results.
 """
 
 import json
+import os
 import re
+import sys
 from pathlib import Path
 
 import yaml
@@ -15,9 +17,12 @@ from deepeval import evaluate
 from deepeval.metrics import GEval
 from deepeval.test_case import LLMTestCase
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from shared.llm_provider import resolve_eval_model
+
 CORPUS_DIR = Path(__file__).resolve().parent.parent.parent / "corpus"
 NUM_RUNS = 5
-EVAL_MODEL = "ollama/qwen2.5:7b"
+EVAL_MODEL = resolve_eval_model()
 
 
 def _load_scenarios(scenario_type: str) -> list:

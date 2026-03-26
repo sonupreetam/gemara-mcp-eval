@@ -7,12 +7,18 @@ invoked for different request types, using real MCP server responses.
 
 import asyncio
 import json
+import os
+import sys
+from pathlib import Path
 
 from deepeval import evaluate
 from deepeval.metrics import GEval
 from deepeval.test_case import LLMTestCase
 
-EVAL_MODEL = "ollama/qwen2.5:7b"
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from shared.llm_provider import resolve_eval_model
+
+EVAL_MODEL = resolve_eval_model()
 
 
 TOOL_SELECTION_SCENARIOS = [

@@ -1,4 +1,4 @@
-.PHONY: all corpus-validate eval-all eval-detllm eval-deepeval eval-mcpevals eval-mcp-eval eval-dfah eval-promptfoo report clean
+.PHONY: all corpus-validate eval-all eval-llm eval-full eval-detllm eval-deepeval eval-mcpevals eval-mcp-eval eval-dfah eval-promptfoo eval-correctness report clean
 
 -include .env
 export
@@ -40,13 +40,13 @@ eval-detllm: $(RESULTS_DIR)
 	cd $(EVAL_DIR)/detllm && python3 run_detllm.py \
 		--corpus ../../$(CORPUS_DIR) \
 		--output ../../$(RESULTS_DIR)/detllm.json \
-		--direct
+		$(DETLLM_ARGS)
 	@echo "==> detLLM complete."
 
 eval-deepeval: $(RESULTS_DIR)
-	@echo "==> Running DeepEval MCP evaluation..."
+	@echo "==> Running DeepEval determinism evaluation..."
 	cd $(EVAL_DIR)/deepeval && python3 -m pytest \
-		test_tool_selection.py test_determinism.py \
+		test_determinism.py \
 		--tb=short -q \
 		--json-report ../../$(RESULTS_DIR)/deepeval.json
 	@echo "==> DeepEval complete."
@@ -72,12 +72,23 @@ eval-dfah: $(RESULTS_DIR)
 	@echo "==> DFAH complete."
 
 eval-promptfoo: $(RESULTS_DIR)
-	@echo "==> Running Promptfoo regression suite..."
+	@echo "==> Running Promptfoo determinism suite..."
 	cd $(EVAL_DIR)/promptfoo && npx promptfoo eval \
 		--output ../../$(RESULTS_DIR)/promptfoo.json
-	@echo "==> Promptfoo complete."
+	@echo "==> Promptfoo determinism complete."
 
-eval-all: eval-detllm eval-deepeval eval-mcpevals eval-mcp-eval eval-dfah eval-promptfoo
+eval-correctness: $(RESULTS_DIR)
+	@echo "==> Running Promptfoo correctness suite..."
+	cd $(EVAL_DIR)/promptfoo && npx promptfoo eval \
+		-c promptfooconfig-correctness.yaml \
+		--output ../../$(RESULTS_DIR)/promptfoo-correctness.json
+	@echo "==> Promptfoo correctness complete."
+
+eval-all: eval-dfah
+
+eval-llm: eval-promptfoo
+
+eval-full: eval-dfah eval-promptfoo eval-detllm eval-deepeval eval-mcp-eval
 
 # --- Analysis ---
 

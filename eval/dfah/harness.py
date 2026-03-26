@@ -177,75 +177,88 @@ def simulate_agent_run(case: dict, run_idx: int) -> dict:
 
 async def real_agent_run(client: GemaraMCPClient, case: dict, run_idx: int, benchmark_dir: Path) -> dict:
     """Execute a real MCP call against the gemara-mcp server."""
-    if "artifact_file" in case:
-        artifact_path = (benchmark_dir / case["artifact_file"]).resolve()
-        artifact_content = artifact_path.read_text() if artifact_path.exists() else ""
-        definition = case.get("definition", "#ControlCatalog")
+    try:
+        if "artifact_file" in case:
+            artifact_path = (benchmark_dir / case["artifact_file"]).resolve()
+            artifact_content = artifact_path.read_text() if artifact_path.exists() else ""
+            definition = case.get("definition", "#ControlCatalog")
 
-        result = await client.call_tool("validate_gemara_artifact", {
-            "artifact_content": artifact_content,
-            "definition": definition,
-        })
+            result = await client.call_tool("validate_gemara_artifact", {
+                "artifact_content": artifact_content,
+                "definition": definition,
+            })
 
-        try:
-            output = result.json
-        except (json.JSONDecodeError, ValueError):
-            output = {"raw": result.text, "is_error": result.is_error}
+            try:
+                output = result.json
+            except (json.JSONDecodeError, ValueError):
+                output = {"raw": result.text, "is_error": result.is_error}
 
+            return {
+                "case_id": case["id"],
+                "run": run_idx,
+                "steps": [
+                    {"tool_call": {"name": "validate_gemara_artifact", "args": {"definition": definition}}},
+                ],
+                "output": output,
+            }
+
+        elif "component" in case:
+            prompt_name = "threat_assessment" if "threat" in case.get("id", "").lower() or "threat" in case.get("description", "").lower() else "control_catalog"
+            prompt_args = {
+                "component": case["component"],
+                "id_prefix": case.get("id_prefix", ""),
+            }
+
+            result = await client.get_prompt(prompt_name, prompt_args)
+            prompt_text = result.text
+
+            output = {
+                "prompt_name": prompt_name,
+                "prompt_text_length": len(prompt_text),
+                "prompt_preview": prompt_text[:500],
+            }
+
+            return {
+                "case_id": case["id"],
+                "run": run_idx,
+                "steps": [
+                    {"tool_call": {"name": f"prompt:{prompt_name}", "args": prompt_args}},
+                ],
+                "output": output,
+            }
+
+        return simulate_agent_run(case, run_idx)
+
+    except Exception as exc:
         return {
             "case_id": case["id"],
             "run": run_idx,
-            "steps": [
-                {"tool_call": {"name": "validate_gemara_artifact", "args": {"definition": definition}}},
-            ],
-            "output": output,
+            "steps": [],
+            "output": {"error": str(exc), "is_error": True},
         }
 
-    elif "component" in case:
-        prompt_name = "threat_assessment" if "threat" in case.get("id", "").lower() or "threat" in case.get("description", "").lower() else "control_catalog"
-        prompt_args = {
-            "component": case["component"],
-            "id_prefix": case.get("id_prefix", ""),
-        }
 
-        result = await client.get_prompt(prompt_name, prompt_args)
-        prompt_text = result.text
-
-        output = {
-            "prompt_name": prompt_name,
-            "prompt_text_length": len(prompt_text),
-            "prompt_preview": prompt_text[:500],
-        }
-
-        return {
-            "case_id": case["id"],
-            "run": run_idx,
-            "steps": [
-                {"tool_call": {"name": f"prompt:{prompt_name}", "args": prompt_args}},
-            ],
-            "output": output,
-        }
-
-    return simulate_agent_run(case, run_idx)
-
-
-def run_benchmark(benchmark_path: Path, runs: int = 20, simulate: bool = False, client: GemaraMCPClient | None = None) -> dict:
+async def run_benchmark(benchmark_path: Path, runs: int = 20, simulate: bool = False, client: GemaraMCPClient | None = None, max_concurrency: int = 4) -> dict:
     """Run a single benchmark file through the DFAH harness."""
     cases = load_benchmark(benchmark_path)
     analyzer = TrajectoryAnalyzer(runs_per_case=runs)
     faithfulness = FaithfulnessAnalyzer()
+
+    sem = asyncio.Semaphore(max_concurrency)
+
+    async def throttled_run(case, i, bench_dir):
+        async with sem:
+            return await real_agent_run(client, case, i, bench_dir)
 
     results = []
     for case in cases:
         if simulate or client is None:
             agent_runs = [simulate_agent_run(case, i) for i in range(runs)]
         else:
-            agent_runs = asyncio.get_event_loop().run_until_complete(
-                asyncio.gather(*[
-                    real_agent_run(client, case, i, benchmark_path.parent)
-                    for i in range(runs)
-                ])
-            )
+            agent_runs = await asyncio.gather(*[
+                throttled_run(case, i, benchmark_path.parent)
+                for i in range(runs)
+            ])
 
         trajectories = [analyzer.extract_tool_trajectory(r) for r in agent_runs]
         traj_determinism = analyzer.compute_trajectory_determinism(trajectories)
@@ -315,7 +328,7 @@ async def run_all(args) -> int:
         all_results = []
         for bf in benchmark_files:
             print(f"\n  Running benchmark: {bf.stem}")
-            result = run_benchmark(bf, runs=args.runs, simulate=args.simulate, client=client)
+            result = await run_benchmark(bf, runs=args.runs, simulate=args.simulate, client=client)
             all_results.append(result)
             status = "PASS" if result["nfr6_passed"] else "FAIL"
             corr_str = f"{result['determinism_faithfulness_correlation']:.3f}" if result["determinism_faithfulness_correlation"] is not None else "N/A"
@@ -345,7 +358,10 @@ async def run_all(args) -> int:
 
     finally:
         if client is not None:
-            await client.__aexit__(None, None, None)
+            try:
+                await client.__aexit__(None, None, None)
+            except Exception:
+                pass
 
 
 def main():

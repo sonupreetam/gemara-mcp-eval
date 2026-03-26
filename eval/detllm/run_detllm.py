@@ -4,7 +4,10 @@ detLLM wrapper for gemara-mcp corpus.
 Reads prompt templates from the shared corpus and runs each through detLLM
 to measure raw LLM determinism (Tier 0/1/2) independent of the MCP server.
 
-Uses Ollama (local) as the LLM backend via its HTTP API.
+Supports multiple LLM backends via the shared llm_provider module:
+  - Ollama (local, default)
+  - Vertex AI (Google Cloud)
+  - OpenAI
 """
 
 import argparse
@@ -16,6 +19,9 @@ from collections import Counter
 from pathlib import Path
 
 import yaml
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from shared.llm_provider import resolve_provider, generate as llm_generate
 
 
 def load_config(config_path: Path) -> dict:
@@ -203,12 +209,65 @@ def run_direct_ollama(prompt_entry: dict, config: dict) -> dict:
     }
 
 
+def run_litellm(prompt_entry: dict, config: dict) -> dict:
+    """Measure determinism using the auto-detected LLM backend via litellm."""
+    provider = resolve_provider()
+    runs = config.get("runs", 5)
+    temperature = config.get("temperature", 0.0)
+    seed = config.get("seed", 42)
+    outputs = []
+
+    for _ in range(runs):
+        text = llm_generate(
+            prompt_entry["prompt"],
+            temperature=temperature,
+            seed=seed if provider.name == "ollama" else None,
+        )
+        outputs.append(text)
+
+    counts = Counter(outputs)
+    most_common = counts.most_common(1)[0][1]
+    match_rate = most_common / len(outputs)
+    unique_count = len(counts)
+
+    return {
+        "scenario_id": prompt_entry["id"],
+        "provider": provider.display,
+        "runs": runs,
+        "unique_outputs": unique_count,
+        "match_rate": match_rate,
+        "deterministic": unique_count == 1,
+        "threshold": prompt_entry["threshold"],
+        "passed": match_rate >= prompt_entry["threshold"],
+    }
+
+
+def _resolve_backend(args, config: dict) -> tuple[str, callable]:
+    """Determine which generation backend to use and return (label, run_fn)."""
+    if args.direct:
+        return "direct ollama", run_direct_ollama
+
+    if args.provider:
+        os.environ["LLM_PROVIDER"] = args.provider
+        provider = resolve_provider()
+        return f"litellm ({provider.display})", run_litellm
+
+    try:
+        provider = resolve_provider()
+        if provider.name == "ollama":
+            return "direct ollama", run_direct_ollama
+        return f"litellm ({provider.display})", run_litellm
+    except RuntimeError:
+        return "detllm+ollama adapter", None
+
+
 def main():
     parser = argparse.ArgumentParser(description="Run detLLM determinism checks on gemara-mcp corpus")
     parser.add_argument("--corpus", type=Path, default=Path(__file__).parent.parent.parent / "corpus")
     parser.add_argument("--config", type=Path, default=Path(__file__).parent / "config.yaml")
     parser.add_argument("--output", type=Path, default=Path(__file__).parent.parent.parent / "results" / "detllm.json")
     parser.add_argument("--direct", action="store_true", help="Skip detLLM framework, call Ollama directly")
+    parser.add_argument("--provider", type=str, default="", help="Force LLM provider: ollama, vertex_ai, openai")
     parser.add_argument("--max-scenarios", type=int, default=0, help="Limit number of scenarios (0=all)")
     args = parser.parse_args()
 
@@ -219,19 +278,25 @@ def main():
     if args.max_scenarios > 0:
         prompts = prompts[:args.max_scenarios]
 
+    backend_label, run_fn = _resolve_backend(args, config)
+
     print(f"Running detLLM checks: {len(prompts)} prompts, {config['runs']} runs each")
-    print(f"Model: {config['model']}, Backend: {'direct ollama' if args.direct else 'detllm+ollama adapter'}")
+    print(f"Model: {config['model']}, Backend: {backend_label}")
 
     results = []
     for prompt_entry in prompts:
         print(f"  Checking {prompt_entry['id']}...")
-        if args.direct:
-            result = run_direct_ollama(prompt_entry, config)
+        if run_fn:
+            result = run_fn(prompt_entry, config)
         else:
             result = run_detllm_check(prompt_entry, config)
             if result.get("error"):
-                print(f"    detLLM failed ({result['error']}), falling back to direct Ollama...")
-                result = run_direct_ollama(prompt_entry, config)
+                print(f"    detLLM failed ({result['error']}), trying litellm fallback...")
+                try:
+                    result = run_litellm(prompt_entry, config)
+                except RuntimeError as e:
+                    print(f"    litellm also unavailable ({e}), falling back to direct Ollama...")
+                    result = run_direct_ollama(prompt_entry, config)
         results.append(result)
         status = "PASS" if result.get("passed") else "FAIL"
         print(f"    {status}: match_rate={result.get('match_rate', 'N/A')}")

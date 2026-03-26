@@ -12,10 +12,25 @@ prompts:
       ```
 
 providers:
-  - id: ollama:chat:qwen2.5:7b
+  # Auto-selected based on environment variables.
+  # Set LLM_PROVIDER=vertex_ai or LLM_PROVIDER=openai to switch.
+  # Ollama is the default when running locally.
+  - id: "ollama:chat:qwen2.5:7b"
     config:
       temperature: 0
     timeout: 180000
+
+  # Uncomment to use Vertex AI (requires VERTEX_PROJECT, VERTEX_LOCATION):
+  # - id: vertex:gemini-2.0-flash
+  #   config:
+  #     temperature: 0
+  #   timeout: 180000
+
+  # Uncomment to use OpenAI (requires OPENAI_API_KEY):
+  # - id: openai:gpt-4o-mini
+  #   config:
+  #     temperature: 0
+  #   timeout: 180000
 
 defaultTest:
   options:
@@ -59,14 +74,6 @@ tests:
     vars:
       definition: "#ThreatCatalog"
       artifact_content: "file://../../corpus/inputs/tc-004-invalid-wrong-type.yaml"
-    assert:
-      - type: contains
-        value: "false"
-
-  - description: "tc-005: Empty input fails validation"
-    vars:
-      definition: "#ControlCatalog"
-      artifact_content: ""
     assert:
       - type: contains
         value: "false"

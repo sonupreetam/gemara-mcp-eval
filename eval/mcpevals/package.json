@@ -8,7 +8,8 @@
     "eval:ci": "ts-node eval-suite.ts --output ../../results/mcpevals.json"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.28.0"
+    "@modelcontextprotocol/sdk": "^1.28.0",
+    "openai": "^4.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
