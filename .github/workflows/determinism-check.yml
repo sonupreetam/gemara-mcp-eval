@@ -51,6 +51,11 @@ jobs:
       - name: Validate corpus
         run: make corpus-validate
 
+      - name: Build gemara-mcp image
+        run: |
+          docker build -t ghcr.io/gemaraproj/gemara-mcp:v0.1.0 \
+            reference/gemara-mcp/
+
       - name: Start gemara-mcp server
         run: |
           docker compose up -d
