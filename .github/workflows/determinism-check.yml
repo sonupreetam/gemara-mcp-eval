@@ -28,8 +28,8 @@ jobs:
 
       - name: Install Python dependencies
         run: |
-          pip install mcp
           pip install -r eval/dfah/requirements.txt
+          pip install -r eval/deepeval/requirements.txt
 
       - name: Build gemara-mcp image
         run: |
