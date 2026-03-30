@@ -26,17 +26,35 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install CUE
+        run: |
+          curl -L https://github.com/cue-lang/cue/releases/download/v0.11.1/cue_v0.11.1_linux_amd64.tar.gz | \
+            sudo tar xz -C /usr/local/bin cue
+
       - name: Install Python dependencies
         run: |
-          pip install -r eval/dfah/requirements.txt
+          pip install -r eval/detllm/requirements.txt
           pip install -r eval/deepeval/requirements.txt
+          pip install -r eval/dfah/requirements.txt
+          pip install -r eval/mcp-eval/requirements.txt
+
+      - name: Install Node.js dependencies
+        run: cd eval/mcpevals && npm install
 
       - name: Build gemara-mcp image
         run: |
           docker build -t ghcr.io/gemaraproj/gemara-mcp:v0.1.0 \
             reference/gemara-mcp/
 
-      - name: Run DFAH output determinism (live MCP)
+      - name: Validate corpus
+        run: make corpus-validate
+
+      - name: Run all evaluations
         env:
           GEMARA_MCP_IMAGE: ghcr.io/gemaraproj/gemara-mcp:v0.1.0
           CONTAINER_RUNTIME: docker
