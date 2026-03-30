@@ -96,7 +96,8 @@ def main():
               f"min={bench['determinism']['min']:.3f}, "
               f"max={bench['determinism']['max']:.3f})")
         print(f"    Faithfulness: {bench['faithfulness']['mean']:.3f}")
-        print(f"    Det-Faith Correlation: {bench['correlation']:.3f}")
+        corr = bench['correlation']
+        print(f"    Det-Faith Correlation: {corr:.3f}" if corr is not None else "    Det-Faith Correlation: N/A")
 
     dist = analysis.get("determinism_distribution", {})
     if dist:

@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-TOOL_NAMES = ["detllm", "deepeval", "mcpevals", "mcp-eval", "dfah", "promptfoo"]
+TOOL_NAMES = ["detllm", "deepeval", "mcp-eval", "dfah", "promptfoo"]
 NFR6_THRESHOLD = 0.9
 
 
@@ -76,7 +76,17 @@ def assess_tool(tool: str, data: dict) -> dict:
             assessment["nfr6_contribution"] = "pass" if score >= NFR6_THRESHOLD else "fail"
             assessment["details"] = {"passed": passed, "total": len(results)}
 
-    elif tool in ("mcpevals", "mcp-eval", "deepeval"):
+    elif tool == "deepeval":
+        summary = data.get("summary", {})
+        passed = summary.get("passed", data.get("passed", 0))
+        total = summary.get("total", data.get("total", 0))
+        if total > 0:
+            score = passed / total
+            assessment["determinism_score"] = score
+            assessment["nfr6_contribution"] = "pass" if score >= NFR6_THRESHOLD else "fail"
+            assessment["details"] = {"passed": passed, "total": total, "note": data.get("note", "")}
+
+    elif tool in ("mcpevals", "mcp-eval"):
         passed = data.get("passed", 0)
         total = data.get("total", data.get("total_scenarios", 0))
         pending = data.get("pending", 0)
@@ -144,6 +154,171 @@ def generate_report(results_dir: Path, threshold: float) -> dict:
     return report
 
 
+TOOL_DESCRIPTIONS = {
+    "dfah": {
+        "full_name": "Determinism-Faithfulness Assurance Harness",
+        "phase": "Phase 1 (No LLM)",
+        "what_it_measures": "Calls gemara-mcp directly via MCP protocol, 20 runs per scenario, and compares outputs for exact/Jaccard/structural match.",
+        "dimensions": "Artifact validation, threat mapping, control suggestion",
+        "failure_mode": "Output drift between repeated runs of the same input",
+    },
+    "promptfoo": {
+        "full_name": "Promptfoo LLM Regression Suite",
+        "phase": "Phase 2 (LLM)",
+        "what_it_measures": "Sends prompts to the LLM (ollama qwen2.5:7b) and checks that responses contain expected validation keywords.",
+        "dimensions": "Artifact validation (LLM layer)",
+        "failure_mode": "LLM response no longer matches expected assertions across model or prompt changes",
+    },
+    "detllm": {
+        "full_name": "detLLM Determinism Measurement",
+        "phase": "Phase 2 (LLM)",
+        "what_it_measures": "Sends the same prompt to the LLM multiple times and measures output consistency.",
+        "dimensions": "Raw LLM output stability",
+        "failure_mode": "LLM produces different outputs for identical prompts",
+    },
+    "deepeval": {
+        "full_name": "DeepEval Determinism Evaluation",
+        "phase": "Phase 2 (LLM)",
+        "what_it_measures": "Pytest-based evaluation using DeepEval metrics for tool selection and validation determinism.",
+        "dimensions": "Tool selection, validation correctness",
+        "failure_mode": "LLM selects different tools or produces inconsistent judgments",
+    },
+    "mcp-eval": {
+        "full_name": "MCP Eval Scenarios",
+        "phase": "Phase 1 (No LLM)",
+        "what_it_measures": "End-to-end MCP scenario execution against gemara-mcp, comparing results to golden outputs.",
+        "dimensions": "Full MCP surface (tools, resources, prompts)",
+        "failure_mode": "MCP server responses diverge from golden reference outputs",
+    },
+}
+
+
+def generate_markdown(report: dict, results_dir: Path) -> str:
+    """Generate a human-readable markdown summary of the NFR6 report."""
+    nfr6 = report["nfr6_report"]
+    assessments = report["per_tool_assessments"]
+    verdict_icon = "PASS" if nfr6["nfr6_verdict"] == "PASS" else "FAIL"
+
+    lines = [
+        "# NFR6 Determinism Compliance Report",
+        "",
+        f"**Generated:** {nfr6['generated_at']}",
+        f"**Threshold:** {nfr6['threshold']:.0%} deterministic outcomes",
+        f"**Overall Score:** {nfr6['overall_determinism_score']:.1%}",
+        f"**Verdict:** {verdict_icon}",
+        f"**Tools Evaluated:** {nfr6['tools_evaluated']}/{nfr6['tools_total']}",
+        "",
+        "---",
+        "",
+        "## Per-Tool Results",
+        "",
+    ]
+
+    evaluated = [a for a in assessments if a["available"] and a["determinism_score"] is not None]
+    not_run = [a for a in assessments if not a["available"]]
+
+    for a in evaluated:
+        tool = a["tool"]
+        desc = TOOL_DESCRIPTIONS.get(tool, {})
+        score = a["determinism_score"]
+        score_str = f"{score:.1%}"
+        status = "PASS" if a["nfr6_contribution"] == "pass" else "FAIL"
+
+        lines.append(f"### {desc.get('full_name', tool)} (`{tool}`)")
+        lines.append("")
+        lines.append(f"| | |")
+        lines.append(f"|---|---|")
+        lines.append(f"| **Score** | {score_str} ({status}) |")
+        lines.append(f"| **Phase** | {desc.get('phase', 'N/A')} |")
+        lines.append(f"| **What it measures** | {desc.get('what_it_measures', 'N/A')} |")
+        lines.append(f"| **Dimensions covered** | {desc.get('dimensions', 'N/A')} |")
+        lines.append(f"| **Failure mode** | {desc.get('failure_mode', 'N/A')} |")
+
+        details = a.get("details", {})
+        if tool == "dfah":
+            traj = details.get("trajectory_determinism", "N/A")
+            faith = details.get("faithfulness", "N/A")
+            traj_str = f"{traj:.1%}" if isinstance(traj, (int, float)) else traj
+            faith_str = f"{faith:.1%}" if isinstance(faith, (int, float)) else faith
+
+            dfah_path = results_dir / "dfah.json"
+            benchmarks_summary = ""
+            if dfah_path.exists():
+                with open(dfah_path) as f:
+                    dfah_data = json.load(f)
+                benchmarks = dfah_data.get("benchmarks", [])
+                total_cases = sum(b.get("total_cases", 0) for b in benchmarks)
+                runs_per = benchmarks[0].get("runs_per_case", "?") if benchmarks else "?"
+                benchmarks_summary = f"{len(benchmarks)} benchmarks, {total_cases} cases, {runs_per} runs each = {total_cases * int(runs_per)} total invocations"
+
+            lines.append("")
+            lines.append(f"**Detail:** trajectory determinism {traj_str}, faithfulness {faith_str}")
+            if benchmarks_summary:
+                lines.append(f"**Coverage:** {benchmarks_summary}")
+
+        elif tool == "promptfoo":
+            passed = details.get("passed", 0)
+            total = details.get("total", 0)
+            lines.append("")
+            lines.append(f"**Detail:** {passed}/{total} test assertions passed")
+
+        elif tool == "detllm":
+            passed = details.get("passed", 0)
+            total = details.get("total", 0)
+            tier = details.get("tier", "unknown")
+            lines.append("")
+            lines.append(f"**Detail:** {passed}/{total} scenarios (tier: {tier})")
+
+        elif tool == "deepeval":
+            passed = details.get("passed", 0)
+            total = details.get("total", 0)
+            lines.append("")
+            lines.append(f"**Detail:** {passed}/{total} test cases passed")
+
+        elif tool == "mcp-eval":
+            passed = details.get("passed", 0)
+            evaluated_count = details.get("evaluated", 0)
+            pending = details.get("pending", 0)
+            lines.append("")
+            lines.append(f"**Detail:** {passed}/{evaluated_count} evaluated, {pending} pending")
+
+        lines.append("")
+
+    if not_run:
+        lines.append("## Not Evaluated")
+        lines.append("")
+        tool_list = ", ".join(
+            f"`{a['tool']}` ({TOOL_DESCRIPTIONS.get(a['tool'], {}).get('full_name', a['tool'])})"
+            for a in not_run
+        )
+        lines.append(f"The following tools were not run: {tool_list}.")
+        lines.append("")
+        lines.append("These can be enabled with `make eval-full` when LLM and MCP infrastructure is available.")
+        lines.append("")
+
+    lines.extend([
+        "---",
+        "",
+        "## NFR6 Dimensions",
+        "",
+        "| Dimension | Target | Description |",
+        "|---|---|---|",
+    ])
+    for dim_key, dim in report.get("dimensions", {}).items():
+        target = dim.get("target", "N/A")
+        target_str = f"{target:.0%}" if isinstance(target, (int, float)) else target
+        lines.append(f"| {dim_key.replace('_', ' ').title()} | {target_str} | {dim.get('description', '')} |")
+
+    lines.extend([
+        "",
+        "---",
+        "",
+        f"*Machine-readable report: `results/nfr6-report.json`*",
+    ])
+
+    return "\n".join(lines)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Generate NFR6 compliance report")
     parser.add_argument("--results-dir", type=Path, default=Path(__file__).parent.parent / "results")
@@ -163,6 +338,10 @@ def main():
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with open(args.output, "w") as f:
         json.dump(report, f, indent=2)
+
+    md_path = args.output.with_suffix(".md")
+    with open(md_path, "w") as f:
+        f.write(generate_markdown(report, args.results_dir))
 
     nfr6 = report["nfr6_report"]
     print("=" * 60)
@@ -186,7 +365,9 @@ def main():
             score_str = f"{score:.1%}" if score is not None else "N/A"
             print(f"  {a['tool']:<15} {score_str:>8}  {a['nfr6_contribution'].upper()}")
 
-    print(f"\nReport written to {args.output}")
+    print(f"\nReports written to:")
+    print(f"  JSON:     {args.output}")
+    print(f"  Markdown: {md_path}")
     return 0 if nfr6["nfr6_verdict"] == "PASS" else 1
 
 

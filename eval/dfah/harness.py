@@ -9,7 +9,9 @@ Reference: https://github.com/ibm-client-engineering/output-drift-financial-llms
 """
 
 import argparse
+import asyncio
 import json
+import math
 import re
 import sys
 from collections import Counter
@@ -17,6 +19,9 @@ from pathlib import Path
 
 import numpy as np
 import yaml
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from shared.mcp_client import GemaraMCPClient
 
 
 class TrajectoryAnalyzer:
@@ -159,13 +164,7 @@ def load_benchmark(benchmark_path: Path) -> list[dict]:
 
 
 def simulate_agent_run(case: dict, run_idx: int) -> dict:
-    """
-    Placeholder for actual agent execution.
-
-    In production, this calls the gemara-mcp server via MCP protocol
-    and records the full tool call trajectory and final output.
-    Replace this with actual MCP client invocation.
-    """
+    """Offline simulation: returns fixture data without calling the MCP server."""
     return {
         "case_id": case["id"],
         "run": run_idx,
@@ -176,15 +175,90 @@ def simulate_agent_run(case: dict, run_idx: int) -> dict:
     }
 
 
-def run_benchmark(benchmark_path: Path, runs: int = 20) -> dict:
+async def real_agent_run(client: GemaraMCPClient, case: dict, run_idx: int, benchmark_dir: Path) -> dict:
+    """Execute a real MCP call against the gemara-mcp server."""
+    try:
+        if "artifact_file" in case:
+            artifact_path = (benchmark_dir / case["artifact_file"]).resolve()
+            artifact_content = artifact_path.read_text() if artifact_path.exists() else ""
+            definition = case.get("definition", "#ControlCatalog")
+
+            result = await client.call_tool("validate_gemara_artifact", {
+                "artifact_content": artifact_content,
+                "definition": definition,
+            })
+
+            try:
+                output = result.json
+            except (json.JSONDecodeError, ValueError):
+                output = {"raw": result.text, "is_error": result.is_error}
+
+            return {
+                "case_id": case["id"],
+                "run": run_idx,
+                "steps": [
+                    {"tool_call": {"name": "validate_gemara_artifact", "args": {"definition": definition}}},
+                ],
+                "output": output,
+            }
+
+        elif "component" in case:
+            prompt_name = "threat_assessment" if "threat" in case.get("id", "").lower() or "threat" in case.get("description", "").lower() else "control_catalog"
+            prompt_args = {
+                "component": case["component"],
+                "id_prefix": case.get("id_prefix", ""),
+            }
+
+            result = await client.get_prompt(prompt_name, prompt_args)
+            prompt_text = result.text
+
+            output = {
+                "prompt_name": prompt_name,
+                "prompt_text_length": len(prompt_text),
+                "prompt_preview": prompt_text[:500],
+            }
+
+            return {
+                "case_id": case["id"],
+                "run": run_idx,
+                "steps": [
+                    {"tool_call": {"name": f"prompt:{prompt_name}", "args": prompt_args}},
+                ],
+                "output": output,
+            }
+
+        return simulate_agent_run(case, run_idx)
+
+    except Exception as exc:
+        return {
+            "case_id": case["id"],
+            "run": run_idx,
+            "steps": [],
+            "output": {"error": str(exc), "is_error": True},
+        }
+
+
+async def run_benchmark(benchmark_path: Path, runs: int = 20, simulate: bool = False, client: GemaraMCPClient | None = None, max_concurrency: int = 4) -> dict:
     """Run a single benchmark file through the DFAH harness."""
     cases = load_benchmark(benchmark_path)
     analyzer = TrajectoryAnalyzer(runs_per_case=runs)
     faithfulness = FaithfulnessAnalyzer()
 
+    sem = asyncio.Semaphore(max_concurrency)
+
+    async def throttled_run(case, i, bench_dir):
+        async with sem:
+            return await real_agent_run(client, case, i, bench_dir)
+
     results = []
     for case in cases:
-        agent_runs = [simulate_agent_run(case, i) for i in range(runs)]
+        if simulate or client is None:
+            agent_runs = [simulate_agent_run(case, i) for i in range(runs)]
+        else:
+            agent_runs = await asyncio.gather(*[
+                throttled_run(case, i, benchmark_path.parent)
+                for i in range(runs)
+            ])
 
         trajectories = [analyzer.extract_tool_trajectory(r) for r in agent_runs]
         traj_determinism = analyzer.compute_trajectory_determinism(trajectories)
@@ -212,16 +286,15 @@ def run_benchmark(benchmark_path: Path, runs: int = 20) -> dict:
     output_scores = [r["output_determinism"] for r in results]
     faith_means = [r["faithfulness_mean"] for r in results]
 
-    # Pearson correlation between determinism and faithfulness (DFAH key finding)
-    correlation = 0.0
+    correlation = None
     if len(output_scores) > 2:
         from scipy.stats import pearsonr
 
         try:
             corr, p_value = pearsonr(output_scores, faith_means)
-            correlation = float(corr)
+            correlation = float(corr) if not math.isnan(corr) else None
         except Exception:
-            correlation = 0.0
+            correlation = None
 
     return {
         "benchmark": benchmark_path.stem,
@@ -237,50 +310,70 @@ def run_benchmark(benchmark_path: Path, runs: int = 20) -> dict:
     }
 
 
+async def run_all(args) -> int:
+    benchmark_files = sorted(args.benchmarks.glob("*.json"))
+    if not benchmark_files:
+        print(f"No benchmark files found in {args.benchmarks}")
+        return 1
+
+    mode_label = "SIMULATED" if args.simulate else "LIVE MCP"
+    print(f"DFAH Harness: {len(benchmark_files)} benchmarks, {args.runs} runs per case ({mode_label})")
+
+    client = None
+    if not args.simulate:
+        client = GemaraMCPClient()
+        await client.__aenter__()
+
+    try:
+        all_results = []
+        for bf in benchmark_files:
+            print(f"\n  Running benchmark: {bf.stem}")
+            result = await run_benchmark(bf, runs=args.runs, simulate=args.simulate, client=client)
+            all_results.append(result)
+            status = "PASS" if result["nfr6_passed"] else "FAIL"
+            corr_str = f"{result['determinism_faithfulness_correlation']:.3f}" if result["determinism_faithfulness_correlation"] is not None else "N/A"
+            print(f"    {status}: determinism={result['output_determinism_mean']:.3f}, "
+                  f"faithfulness={result['faithfulness_mean']:.3f}, "
+                  f"correlation={corr_str}")
+
+        summary = {
+            "tool": "dfah",
+            "total_benchmarks": len(all_results),
+            "nfr6_passed": all(r["nfr6_passed"] for r in all_results),
+            "overall_determinism": float(np.mean([r["output_determinism_mean"] for r in all_results])),
+            "overall_faithfulness": float(np.mean([r["faithfulness_mean"] for r in all_results])),
+            "benchmarks": all_results,
+        }
+
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        with open(args.output, "w") as f:
+            json.dump(summary, f, indent=2)
+
+        print(f"\nOverall: determinism={summary['overall_determinism']:.3f}, "
+              f"faithfulness={summary['overall_faithfulness']:.3f}")
+        print(f"NFR6 (>=0.9): {'PASS' if summary['nfr6_passed'] else 'FAIL'}")
+        print(f"Results written to {args.output}")
+
+        return 0 if summary["nfr6_passed"] else 1
+
+    finally:
+        if client is not None:
+            try:
+                await client.__aexit__(None, None, None)
+            except Exception:
+                pass
+
+
 def main():
     parser = argparse.ArgumentParser(description="DFAH harness for gemara-mcp determinism evaluation")
     parser.add_argument("--benchmarks", type=Path, default=Path(__file__).parent / "benchmarks")
     parser.add_argument("--runs", type=int, default=20)
     parser.add_argument("--output", type=Path, default=Path(__file__).parent.parent.parent / "results" / "dfah.json")
+    parser.add_argument("--simulate", action="store_true", help="Use simulated agent runs (no MCP server required)")
     args = parser.parse_args()
 
-    benchmark_files = sorted(args.benchmarks.glob("*.json"))
-    if not benchmark_files:
-        print(f"No benchmark files found in {args.benchmarks}")
-        sys.exit(1)
-
-    print(f"DFAH Harness: {len(benchmark_files)} benchmarks, {args.runs} runs per case")
-
-    all_results = []
-    for bf in benchmark_files:
-        print(f"\n  Running benchmark: {bf.stem}")
-        result = run_benchmark(bf, runs=args.runs)
-        all_results.append(result)
-        status = "PASS" if result["nfr6_passed"] else "FAIL"
-        print(f"    {status}: determinism={result['output_determinism_mean']:.3f}, "
-              f"faithfulness={result['faithfulness_mean']:.3f}, "
-              f"correlation={result['determinism_faithfulness_correlation']:.3f}")
-
-    summary = {
-        "tool": "dfah",
-        "total_benchmarks": len(all_results),
-        "nfr6_passed": all(r["nfr6_passed"] for r in all_results),
-        "overall_determinism": float(np.mean([r["output_determinism_mean"] for r in all_results])),
-        "overall_faithfulness": float(np.mean([r["faithfulness_mean"] for r in all_results])),
-        "benchmarks": all_results,
-    }
-
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    with open(args.output, "w") as f:
-        json.dump(summary, f, indent=2)
-
-    print(f"\nOverall: determinism={summary['overall_determinism']:.3f}, "
-          f"faithfulness={summary['overall_faithfulness']:.3f}")
-    print(f"NFR6 (>=0.9): {'PASS' if summary['nfr6_passed'] else 'FAIL'}")
-    print(f"Results written to {args.output}")
-
-    return 0 if summary["nfr6_passed"] else 1
+    sys.exit(asyncio.run(run_all(args)))
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

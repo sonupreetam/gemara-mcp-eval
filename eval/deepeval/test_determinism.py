@@ -1,13 +1,15 @@
 """
 DeepEval tests for determinism measurement (Issue #14, Criterion 3).
 
-Runs each scenario N times and measures consistency of outputs
-using Jaccard similarity for threat/control lists and exact match
-for validation results.
+Runs each scenario N times against the live gemara-mcp server and measures
+consistency of outputs using Jaccard similarity for threat/control lists
+and exact match for validation results.
 """
 
 import json
+import os
 import re
+import sys
 from pathlib import Path
 
 import yaml
@@ -15,9 +17,12 @@ from deepeval import evaluate
 from deepeval.metrics import GEval
 from deepeval.test_case import LLMTestCase
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from shared.llm_provider import resolve_eval_model
+
 CORPUS_DIR = Path(__file__).resolve().parent.parent.parent / "corpus"
 NUM_RUNS = 5
-EVAL_MODEL = "ollama/qwen2.5:7b"
+EVAL_MODEL = resolve_eval_model()
 
 
 def _load_scenarios(scenario_type: str) -> list:
@@ -46,9 +51,12 @@ def _extract_keywords(text: str, keywords: list) -> set:
     return {kw for kw in keywords if kw.lower() in text_lower}
 
 
-def test_validation_determinism():
+def test_validation_determinism(mcp_client, tool_scenarios):
     """validate_gemara_artifact should produce identical results every run."""
-    scenarios = [s for s in _load_scenarios("validate_gemara_artifact")]
+    import asyncio
+    loop = asyncio.get_event_loop()
+
+    scenarios = tool_scenarios
     if not scenarios:
         with open(CORPUS_DIR / "scenarios.yaml") as f:
             all_scenarios = yaml.safe_load(f)["scenarios"]
@@ -62,19 +70,18 @@ def test_validation_determinism():
         artifact_content = input_path.read_text()
         definition = scenario["tool_params"]["definition"]
 
-        simulated_outputs = []
-        for _ in range(NUM_RUNS):
-            simulated_outputs.append(
-                json.dumps(
-                    {
-                        "valid": scenario["expected"]["result"] == "valid",
-                        "definition": definition,
-                        "artifact_length": len(artifact_content),
-                    }
-                )
-            )
+        async def call_once():
+            result = await mcp_client.call_tool("validate_gemara_artifact", {
+                "artifact_content": artifact_content,
+                "definition": definition,
+            })
+            return result.text
 
-        unique_outputs = set(simulated_outputs)
+        outputs = []
+        for _ in range(NUM_RUNS):
+            outputs.append(loop.run_until_complete(call_once()))
+
+        unique_outputs = set(outputs)
         determinism_rate = 1.0 / len(unique_outputs) if unique_outputs else 0
         threshold = scenario["determinism"]["threshold"]
 
@@ -84,8 +91,11 @@ def test_validation_determinism():
         )
 
 
-def test_threat_assessment_determinism():
-    """threat_assessment prompt should suggest consistent threats across runs."""
+def test_threat_assessment_determinism(mcp_client):
+    """threat_assessment prompt should return consistent prompt content across runs."""
+    import asyncio
+    loop = asyncio.get_event_loop()
+
     scenarios = _load_scenarios("threat_assessment")
 
     determinism_metric = GEval(
@@ -108,8 +118,16 @@ def test_threat_assessment_determinism():
         golden = yaml.safe_load(golden_path.read_text())
         expected_threats = golden.get("expected_threat_titles", [])
 
+        async def get_prompt_text():
+            result = await mcp_client.get_prompt("threat_assessment", {
+                "component": scenario["prompt_params"]["COMPONENT"],
+                "id_prefix": scenario["prompt_params"]["ID_PREFIX"],
+            })
+            return result.text
+
         test_cases = []
         for run_idx in range(NUM_RUNS):
+            prompt_text = loop.run_until_complete(get_prompt_text())
             test_cases.append(
                 LLMTestCase(
                     input=(
@@ -117,10 +135,7 @@ def test_threat_assessment_determinism():
                         f"{scenario['prompt_params']['COMPONENT']} "
                         f"with prefix {scenario['prompt_params']['ID_PREFIX']}"
                     ),
-                    actual_output=(
-                        f"[Simulated Run {run_idx + 1}] Generated ThreatCatalog with threats: "
-                        + ", ".join(expected_threats)
-                    ),
+                    actual_output=prompt_text[:2000],
                     expected_output=f"Expected threats: {', '.join(expected_threats)}",
                 )
             )
@@ -134,8 +149,11 @@ def test_threat_assessment_determinism():
             )
 
 
-def test_control_catalog_determinism():
-    """control_catalog prompt should suggest consistent controls across runs."""
+def test_control_catalog_determinism(mcp_client):
+    """control_catalog prompt should return consistent prompt content across runs."""
+    import asyncio
+    loop = asyncio.get_event_loop()
+
     scenarios = _load_scenarios("control_catalog")
 
     determinism_metric = GEval(
@@ -159,8 +177,16 @@ def test_control_catalog_determinism():
         expected_controls = golden.get("expected_control_titles", [])
         expected_families = golden.get("expected_families", [])
 
+        async def get_prompt_text():
+            result = await mcp_client.get_prompt("control_catalog", {
+                "component": scenario["prompt_params"]["COMPONENT"],
+                "id_prefix": scenario["prompt_params"]["ID_PREFIX"],
+            })
+            return result.text
+
         test_cases = []
         for run_idx in range(NUM_RUNS):
+            prompt_text = loop.run_until_complete(get_prompt_text())
             test_cases.append(
                 LLMTestCase(
                     input=(
@@ -168,11 +194,7 @@ def test_control_catalog_determinism():
                         f"{scenario['prompt_params']['COMPONENT']} "
                         f"with prefix {scenario['prompt_params']['ID_PREFIX']}"
                     ),
-                    actual_output=(
-                        f"[Simulated Run {run_idx + 1}] Generated ControlCatalog with "
-                        f"controls: {', '.join(expected_controls)} "
-                        f"families: {', '.join(expected_families)}"
-                    ),
+                    actual_output=prompt_text[:2000],
                     expected_output=(
                         f"Expected controls: {', '.join(expected_controls)}, "
                         f"families: {', '.join(expected_families)}"
