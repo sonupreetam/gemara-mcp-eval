@@ -6,10 +6,12 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
-  schedule:
-    - cron: "0 6 * * 1" # Weekly Monday 6am UTC
 
 jobs:
+  # ---------------------------------------------------------------
+  # Phase 1: Output determinism — no LLM required.
+  # Runs on every push/PR and is the CI gate for NFR6 compliance.
+  # ---------------------------------------------------------------
   output-determinism:
     runs-on: ubuntu-latest
     permissions:
@@ -26,106 +28,52 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install CUE
+        run: |
+          curl -L https://github.com/cue-lang/cue/releases/download/v0.11.1/cue_v0.11.1_linux_amd64.tar.gz | \
+            sudo tar xz -C /usr/local/bin cue
+
       - name: Install Python dependencies
         run: |
           pip install -r eval/dfah/requirements.txt
-          pip install -r eval/deepeval/requirements.txt
+          pip install -r eval/mcp-eval/requirements.txt
 
       - name: Build gemara-mcp image
         run: |
           docker build -t ghcr.io/gemaraproj/gemara-mcp:v0.1.0 \
             reference/gemara-mcp/
 
-      - name: Run DFAH output determinism (live MCP)
+      - name: Validate corpus
+        run: make corpus-validate
+
+      - name: Run Phase 1 evaluations
         env:
           GEMARA_MCP_IMAGE: ghcr.io/gemaraproj/gemara-mcp:v0.1.0
           CONTAINER_RUNTIME: docker
-        run: make eval-all
+        run: make eval-phase1
 
-      - name: Generate NFR6 report
-        run: make report
+      - name: Generate Phase 1 NFR6 report
+        run: make report-phase1
 
-      - name: Upload results
+      - name: Upload Phase 1 results
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: output-determinism-results
+          name: phase1-results
           path: results/
 
-      - name: Check NFR6 threshold
+      - name: Check NFR6 threshold (Phase 1)
         run: |
           python -c "
           import json, sys
-          with open('results/nfr6-report.json') as f:
+          with open('results/nfr6-phase1-report.json') as f:
               report = json.load(f)
           verdict = report['nfr6_report']['nfr6_verdict']
           score = report['nfr6_report']['overall_determinism_score']
-          print(f'NFR6: {verdict} (score: {score:.1%})')
+          print(f'NFR6 Phase 1: {verdict} (score: {score:.1%})')
+          for a in report['per_tool_assessments']:
+              s = a['determinism_score']
+              s_str = f\"{s:.1%}\" if s is not None else 'N/A'
+              print(f\"  {a['tool']}: {s_str} ({a['nfr6_contribution'].upper()})\")
           sys.exit(0 if verdict == 'PASS' else 1)
           "
-
-  llm-determinism:
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-
-    services:
-      ollama:
-        image: ollama/ollama:latest
-        ports:
-          - 11434:11434
-
-    steps:
-      - name: Checkout with submodules
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Pull Ollama model
-        run: |
-          for i in $(seq 1 30); do
-            curl -sf http://localhost:11434/api/tags > /dev/null && break
-            echo "Waiting for Ollama to be ready... ($i)"
-            sleep 2
-          done
-          curl -sf http://localhost:11434/api/tags > /dev/null || \
-            { echo "Ollama never became ready"; exit 1; }
-          echo "Pulling qwen2.5:7b model..."
-          curl -sf http://localhost:11434/api/pull \
-            -d '{"name":"qwen2.5:7b"}' | tail -1
-          echo "Model pull complete."
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Install Promptfoo
-        run: npm install -g promptfoo
-
-      - name: Run Promptfoo LLM determinism
-        env:
-          OLLAMA_BASE_URL: http://localhost:11434
-          OLLAMA_MODEL: qwen2.5:7b
-        run: make eval-llm
-
-      - name: Run Promptfoo correctness (informational)
-        if: always()
-        continue-on-error: true
-        env:
-          OLLAMA_BASE_URL: http://localhost:11434
-          OLLAMA_MODEL: qwen2.5:7b
-        run: make eval-correctness
-
-      - name: Generate NFR6 report
-        run: |
-          pip install --quiet pyyaml
-          make report
-
-      - name: Upload results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: llm-determinism-results
-          path: results/

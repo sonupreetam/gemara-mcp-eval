@@ -1,4 +1,4 @@
-.PHONY: all corpus-validate eval-all eval-llm eval-full eval-detllm eval-deepeval eval-mcpevals eval-mcp-eval eval-dfah eval-promptfoo eval-correctness report clean
+.PHONY: all corpus-validate eval-phase1 eval-all eval-detllm eval-deepeval eval-mcpevals eval-mcp-eval eval-dfah eval-promptfoo eval-correctness report report-phase1 clean
 
 -include .env
 export
@@ -48,7 +48,7 @@ eval-deepeval: $(RESULTS_DIR)
 	cd $(EVAL_DIR)/deepeval && python3 -m pytest \
 		test_determinism.py \
 		--tb=short -q \
-		--json-report ../../$(RESULTS_DIR)/deepeval.json
+		--json-report --json-report-file=../../$(RESULTS_DIR)/deepeval.json
 	@echo "==> DeepEval complete."
 
 eval-mcpevals: $(RESULTS_DIR)
@@ -84,11 +84,9 @@ eval-correctness: $(RESULTS_DIR)
 		--output ../../$(RESULTS_DIR)/promptfoo-correctness.json
 	@echo "==> Promptfoo correctness complete."
 
-eval-all: eval-dfah
+eval-all: eval-phase1
 
-eval-llm: eval-promptfoo
-
-eval-full: eval-dfah eval-promptfoo eval-detllm eval-deepeval eval-mcp-eval
+eval-phase1: eval-dfah eval-mcp-eval
 
 # --- Analysis ---
 
@@ -99,6 +97,15 @@ report: $(RESULTS_DIR)
 		--threshold 0.9 \
 		--output $(RESULTS_DIR)/nfr6-report.json
 	@echo "==> NFR6 report: $(RESULTS_DIR)/nfr6-report.json"
+
+report-phase1: $(RESULTS_DIR)
+	@echo "==> Generating Phase 1 NFR6 report (output determinism, no LLM)..."
+	python3 $(ANALYSIS_DIR)/nfr6_report.py \
+		--phase 1 \
+		--results-dir $(RESULTS_DIR) \
+		--threshold 0.9 \
+		--output $(RESULTS_DIR)/nfr6-phase1-report.json
+	@echo "==> Phase 1 NFR6 report: $(RESULTS_DIR)/nfr6-phase1-report.json"
 
 compare:
 	python3 $(ANALYSIS_DIR)/compare_results.py \

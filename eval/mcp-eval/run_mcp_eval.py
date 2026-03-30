@@ -57,7 +57,7 @@ def corpus_to_mcp_eval_scenarios(scenarios: list, corpus_dir: Path) -> list:
             })
 
         elif scenario["type"] == "prompt":
-            params = scenario.get("prompt_params", {})
+            params = {k.lower(): v for k, v in scenario.get("prompt_params", {}).items()}
             mcp_scenarios.append({
                 "id": scenario["id"],
                 "name": scenario["name"],
@@ -151,6 +151,7 @@ async def execute_step(client: GemaraMCPClient, step: dict) -> dict:
         return {
             "action": action,
             "prompt": prompt_name,
+            "result_text": result_text,
             "result_length": len(result_text),
             "assertions": assertion_results,
             "passed": all_passed,
@@ -159,36 +160,86 @@ async def execute_step(client: GemaraMCPClient, step: dict) -> dict:
     return {"action": action, "passed": False, "message": f"Unknown action: {action}"}
 
 
+def _extract_raw_response(step_result: dict):
+    """Extract the canonical response value from a step result for exact-match comparison."""
+    if "result" in step_result:
+        return step_result["result"]
+    if "result_text" in step_result:
+        return step_result["result_text"]
+    return None
+
+
+def _runs_match(ref: list, candidate: list, match_type: str) -> bool:
+    """Check whether two per-step response lists are equivalent."""
+    if match_type == "exact":
+        return ref == candidate
+    return ref == candidate
+
+
 async def run_scenarios(client: GemaraMCPClient, scenarios: list) -> list:
-    """Execute mcp-eval scenarios against the live gemara-mcp server."""
+    """Execute mcp-eval scenarios with repeated runs for determinism measurement."""
     results = []
     for scenario in scenarios:
+        det = scenario.get("determinism", {})
+        num_runs = det.get("runs", 1)
+        match_type = det.get("match_type", "exact")
+        threshold = det.get("threshold", 1.0)
         steps_total = len(scenario["steps"])
-        step_results = []
 
-        for step in scenario["steps"]:
-            try:
-                step_result = await execute_step(client, step)
-                step_results.append(step_result)
-            except Exception as e:
-                step_results.append({
-                    "action": step["action"],
-                    "passed": False,
-                    "message": f"Error: {e}",
-                })
+        # Collect step results for every run
+        all_run_step_results: list[list[dict]] = []
+        for _run in range(num_runs):
+            run_steps = []
+            for step in scenario["steps"]:
+                try:
+                    run_steps.append(await execute_step(client, step))
+                except Exception as e:
+                    run_steps.append({
+                        "action": step["action"],
+                        "passed": False,
+                        "result_text": None,
+                        "message": f"Error: {e}",
+                    })
+            all_run_step_results.append(run_steps)
 
-        steps_passed = sum(1 for s in step_results if s.get("passed"))
-        all_passed = steps_passed == steps_total
+        # Functional correctness: assertions from the first run
+        first_run = all_run_step_results[0]
+        steps_passed_functional = sum(1 for s in first_run if s.get("passed"))
+        all_functional_passed = steps_passed_functional == steps_total
+
+        # Determinism: compare each run's raw responses against run-0
+        reference = [_extract_raw_response(s) for s in first_run]
+        matching_runs = sum(
+            1
+            for run_steps in all_run_step_results
+            if _runs_match(reference, [_extract_raw_response(s) for s in run_steps], match_type)
+        )
+        match_rate = matching_runs / num_runs if num_runs > 0 else 1.0
+        determinism_passed = match_rate >= threshold
+
+        passed = all_functional_passed and determinism_passed
+        msg_parts = []
+        if not all_functional_passed:
+            msg_parts.append(f"{steps_passed_functional}/{steps_total} functional steps passed")
+        if not determinism_passed:
+            msg_parts.append(f"match_rate {match_rate:.1%} < threshold {threshold:.0%}")
 
         results.append({
             "id": scenario["id"],
             "name": scenario["name"],
             "steps_total": steps_total,
-            "steps_passed": steps_passed,
-            "status": "passed" if all_passed else "failed",
-            "message": "All steps passed" if all_passed else f"{steps_passed}/{steps_total} steps passed",
-            "step_results": step_results,
-            "determinism": scenario.get("determinism", {}),
+            "steps_passed": steps_passed_functional,
+            "status": "passed" if passed else "failed",
+            "message": "All steps passed (deterministic)" if passed else "; ".join(msg_parts),
+            "step_results": first_run,
+            "determinism": {
+                "runs": num_runs,
+                "match_type": match_type,
+                "threshold": threshold,
+                "match_rate": round(match_rate, 4),
+                "matching_runs": matching_runs,
+                "passed": determinism_passed,
+            },
         })
     return results
 
@@ -210,13 +261,16 @@ async def run_all(args) -> int:
 
     passed = sum(1 for r in results if r["status"] == "passed")
     failed = sum(1 for r in results if r["status"] == "failed")
-    print(f"Results: {passed} passed, {failed} failed")
+    det_scores = [r["determinism"]["match_rate"] for r in results]
+    avg_match_rate = sum(det_scores) / len(det_scores) if det_scores else 0.0
+    print(f"Results: {passed} passed, {failed} failed (avg match_rate: {avg_match_rate:.1%})")
 
     summary = {
         "tool": "mcp-eval",
         "total_scenarios": len(results),
         "passed": passed,
         "failed": failed,
+        "average_match_rate": round(avg_match_rate, 4),
         "results": results,
     }
 
