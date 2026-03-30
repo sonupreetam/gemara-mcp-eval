@@ -150,7 +150,7 @@ def run_detllm_check(prompt_entry: dict, config: dict) -> dict:
         report = check(
             backend="custom",
             model=config["model"],
-            prompts=[prompt_entry["prompt"]],
+            prompts=[{"prompt": prompt_entry["prompt"]}],
             runs=config["runs"],
             batch_size=config["batch_size"],
             tier=config["tier"],
