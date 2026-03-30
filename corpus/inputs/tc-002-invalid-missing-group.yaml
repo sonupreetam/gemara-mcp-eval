@@ -1,29 +1,32 @@
 metadata:
   id: EVAL-BAD
-  type: ControlCatalog
+  type: ThreatCatalog
   gemara-version: "1.0"
   description: |
-    A control catalog with a control referencing a non-existent group.
+    A ControlCatalog with the wrong metadata.type — validated against
+    #ControlCatalog, which must reject the ThreatCatalog type value.
   author:
     id: eval-harness
     name: Evaluation Harness
     type: Software
-title: Invalid Control Catalog
+title: Invalid Control Catalog (Wrong Type)
 groups:
   - id: data-protection
     title: Data Protection
-    description: Controls ensuring data confidentiality and integrity.
+    description: Controls for data integrity.
 controls:
   - id: EVAL-BAD.C01
-    group: nonexistent-group
-    title: Broken Control
+    group: data-protection
+    title: Placeholder Control
     state: Active
     objective: |
-      This control references a group that does not exist in the groups list.
+      This control exists solely to test type-mismatch detection.
+      The metadata.type is ThreatCatalog but the definition is #ControlCatalog.
     assessment-requirements:
       - id: EVAL-BAD.C01.TR01
         state: Active
         text: |
-          When invoked, the service MUST respond within 5 seconds.
+          When invoked, the service MUST verify the artifact type matches
+          the requested schema definition.
         applicability:
           - standard
