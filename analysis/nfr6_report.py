@@ -242,6 +242,51 @@ TOOL_DESCRIPTIONS = {
 }
 
 
+def merge_reports(phase1_path: Path, phase2_path: Path) -> dict:
+    """Combine a Phase 1 and Phase 2 JSON report into a single composite report.
+
+    The NFR6 verdict is driven by Phase 1 alone. Phase 2 assessments are
+    carried through with advisory=True and do not affect the score.
+    """
+    with open(phase1_path) as f:
+        p1 = json.load(f)
+    with open(phase2_path) as f:
+        p2 = json.load(f)
+
+    p1_nfr6 = p1["nfr6_report"]
+    p2_nfr6 = p2["nfr6_report"]
+
+    combined_assessments = p1.get("per_tool_assessments", []) + p2.get("per_tool_assessments", [])
+
+    advisory_assessments = [
+        a for a in p2.get("per_tool_assessments", [])
+        if a["determinism_score"] is not None
+    ]
+
+    report = {
+        "nfr6_report": {
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "phase": "all",
+            "threshold": p1_nfr6["threshold"],
+            "overall_determinism_score": p1_nfr6["overall_determinism_score"],
+            "nfr6_verdict": p1_nfr6["nfr6_verdict"],
+            "tools_evaluated": p1_nfr6["tools_evaluated"],
+            "tools_total": p1_nfr6["tools_total"] + p2_nfr6["tools_total"],
+            "note": (
+                "NFR6 verdict is based on Phase 1 (output determinism) tools only. "
+                "Phase 2 results are advisory and do not affect the verdict."
+            ),
+        },
+        "per_tool_assessments": combined_assessments,
+        "advisory_summary": {
+            "tools_evaluated": len(advisory_assessments),
+            "scores": {a["tool"]: a["determinism_score"] for a in advisory_assessments},
+        } if advisory_assessments else None,
+        "dimensions": p1.get("dimensions", {}),
+    }
+    return report
+
+
 def generate_markdown(report: dict, results_dir: Path) -> str:
     """Generate a human-readable markdown summary of the NFR6 report."""
     nfr6 = report["nfr6_report"]
@@ -392,7 +437,32 @@ def main():
         default=0,
         help="0=all (default), 1=Phase 1 output determinism only, 2=Phase 2 LLM advisory only",
     )
+    parser.add_argument(
+        "--merge",
+        action="store_true",
+        help="Merge an existing Phase 1 and Phase 2 report into a combined report",
+    )
+    parser.add_argument("--phase1-report", type=Path, help="Path to nfr6-phase1-report.json (for --merge)")
+    parser.add_argument("--phase2-report", type=Path, help="Path to nfr6-phase2-report.json (for --merge)")
     args = parser.parse_args()
+
+    if args.merge:
+        if not args.phase1_report or not args.phase2_report:
+            print("--merge requires --phase1-report and --phase2-report")
+            sys.exit(1)
+        report = merge_reports(args.phase1_report, args.phase2_report)
+        report = _sanitize_for_json(report)
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        with open(args.output, "w") as f:
+            json.dump(report, f, indent=2)
+        md_path = args.output.with_suffix(".md")
+        with open(md_path, "w") as f:
+            f.write(generate_markdown(report, args.results_dir))
+        nfr6 = report["nfr6_report"]
+        print(f"Merged report: {nfr6['nfr6_verdict']} ({nfr6['overall_determinism_score']:.1%})")
+        print(f"  JSON:     {args.output}")
+        print(f"  Markdown: {md_path}")
+        sys.exit(0 if nfr6["nfr6_verdict"] == "PASS" else 1)
 
     if not args.results_dir.exists():
         print(f"Results directory not found: {args.results_dir}")
