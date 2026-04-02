@@ -8,14 +8,18 @@ Determinism evaluation framework for [gemara-mcp](https://github.com/gemaraproj/
 
 "Deterministic outcomes" means: given the same input, the gemara-mcp server returns the **same output every time**. This is a property of the server, not of the LLM querying it.
 
+---
+
 ## Evaluation Phases
 
 The framework is split into two phases with a strict separation of concerns:
 
-| Phase | Branch | Purpose | NFR6 role |
+| Phase | Purpose | NFR6 role | Needs LLM |
 |---|---|---|---|
-| **Phase 1** | `feat/phase1-report` | Output determinism — no LLM | **NFR6 gate** |
-| **Phase 2** | `feat/phase2-report` | LLM integration quality | Advisory only |
+| **Phase 1** | Output determinism | **NFR6 gate** — determines pass/fail | No |
+| **Phase 2** | LLM integration quality | Advisory only — never affects verdict | Yes |
+
+Both phases live on this branch (`feat/phase2-report`).
 
 ### Phase 1 — Output Determinism
 
@@ -28,11 +32,11 @@ Measures whether gemara-mcp produces identical outputs for identical inputs acro
 
 **This is the NFR6 gate.** Phase 1 alone determines pass/fail.
 
-See [PHASE1-OUTPUT-DETERMINISM.md](./PHASE1-OUTPUT-DETERMINISM.md) for full details on tools, scoring, corpus, and CI.
+See [PHASE1-OUTPUT-DETERMINISM.md](./PHASE1-OUTPUT-DETERMINISM.md) for full details.
 
 ### Phase 2 — LLM Integration Quality
 
-Measures how well the LLM layer works with gemara-mcp. Results are advisory — they inform quality but do not affect the NFR6 verdict.
+Measures how well the LLM layer interacts with gemara-mcp. Results are advisory — they inform quality but do not affect the NFR6 verdict.
 
 | Tool | What it measures | Needs LLM |
 |---|---|---|
@@ -40,16 +44,17 @@ Measures how well the LLM layer works with gemara-mcp. Results are advisory — 
 | **MCP Evals** | LLM-scored tool response quality (accuracy, completeness, clarity) | Yes (LLM-as-judge) |
 | **Promptfoo** | Assertion-based regression testing | Yes |
 
-Phase 2 adds on top of Phase 1 — switch to `feat/phase2-report` when LLM infrastructure is available.
+See [PHASE2-LLM-DETERMINISM.md](./PHASE2-LLM-DETERMINISM.md) for full details.
 
 ---
 
 ## Quick Start
 
+### Phase 1 — no LLM needed
+
 ```bash
 git clone --recurse-submodules https://github.com/<your-user>/gemara-mcp-eval.git
 cd gemara-mcp-eval
-git checkout feat/phase1-report
 
 pip install -r eval/dfah/requirements.txt
 pip install -r eval/mcp-eval/requirements.txt
@@ -59,7 +64,37 @@ make eval-phase1
 make report-phase1
 ```
 
-No LLM, no Ollama, no Node.js needed for Phase 1.
+### Phase 2 — requires Ollama + Node.js
+
+```bash
+# After running Phase 1 above:
+pip install -r eval/detllm/requirements.txt
+pip install -r eval/mcp-eval/requirements.txt
+cd eval/mcpevals && npm install && cd ../..
+npm install -g promptfoo
+
+make eval-phase2
+make report-phase2
+
+# Merge both reports into a single NFR6 report
+make report
+```
+
+Each harness spawns its own `docker run --rm -i ghcr.io/gemaraproj/gemara-mcp:v0.1.0` process via MCP stdio transport. No `docker compose up` is needed.
+
+---
+
+## Make Targets
+
+| Target | What it runs |
+|---|---|
+| `make corpus-validate` | Validate corpus inputs against Gemara CUE schemas |
+| `make eval-phase1` | DFAH + mcp-eval (no LLM) |
+| `make eval-phase2` | detLLM + MCP Evals + Promptfoo (needs LLM) |
+| `make eval-full` | Phase 1 + Phase 2 |
+| `make report-phase1` | NFR6 Phase 1 report → `results/nfr6-phase1-report.json` |
+| `make report-phase2` | Advisory Phase 2 report → `results/nfr6-phase2-report.json` |
+| `make report` | Merged report → `results/nfr6-report.json` (merges both if available) |
 
 ---
 
@@ -73,10 +108,13 @@ gemara-mcp-eval/
 │   └── inputs/             # YAML artifact files for tool scenarios
 ├── eval/
 │   ├── shared/             # Shared MCP stdio client (Python)
-│   ├── dfah/               # DFAH harness + benchmarks
-│   └── mcp-eval/           # mcp-eval scenario runner
+│   ├── dfah/               # Phase 1: DFAH harness + benchmarks
+│   ├── mcp-eval/           # Phase 1: mcp-eval scenario runner
+│   ├── detllm/             # Phase 2: raw LLM determinism
+│   ├── mcpevals/           # Phase 2: LLM-scored MCP quality (Node.js)
+│   └── promptfoo/          # Phase 2: assertion-based regression (Node.js)
 ├── analysis/
-│   └── nfr6_report.py      # NFR6 report generator
+│   └── nfr6_report.py      # NFR6 report generator (supports --phase 1|2, --merge)
 └── results/                # Generated at runtime (gitignored)
 ```
 
@@ -86,6 +124,26 @@ gemara-mcp-eval/
 
 - **Tool**: `validate_gemara_artifact` — validate YAML against Gemara CUE schemas (`#ControlCatalog`, `#ThreatCatalog`, `#Policy`, `#EvaluationLog`)
 - **Prompts**: `threat_assessment`, `control_catalog` — template-rendered content keyed by `component` and `id_prefix`
+
+---
+
+## Prerequisites
+
+| Phase | Requirements |
+|---|---|
+| Phase 1 | Python 3.10+, Docker or Podman, [CUE CLI](https://cuelang.org/docs/install/) |
+| Phase 2 | + Node.js 20+, [Ollama](https://ollama.ai/) with `qwen2.5:7b` |
+
+---
+
+## CI
+
+`.github/workflows/determinism-check.yml` defines two jobs:
+
+| Job | Triggers | Blocks PRs |
+|---|---|---|
+| `output-determinism` (Phase 1) | push, pull_request, workflow_dispatch | Yes — exits 1 on FAIL |
+| `llm-determinism` (Phase 2) | workflow_dispatch, weekly schedule | No — `continue-on-error: true` |
 
 ---
 
