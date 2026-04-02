@@ -153,7 +153,7 @@ advisory = combined["advisory_summary"]              # Phase 2 scores summary
 
 ## CI Integration
 
-`.github/workflows/determinism-check.yml` defines the `llm-determinism` job for Phase 2.
+`.github/workflows/llm-advisory.yml` runs the Phase 2 advisory job.
 
 ```
 workflow_dispatch / weekly schedule

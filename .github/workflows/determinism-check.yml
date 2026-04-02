@@ -1,4 +1,8 @@
-name: Determinism Evaluation
+name: "NFR6 — Output Determinism (Phase 1)"
+
+# This is the NFR6 compliance gate.
+# Runs on every push and PR. Exits 1 if the 90% determinism threshold is not met.
+# No LLM, no Ollama, no Node.js required.
 
 on:
   push:
@@ -6,14 +10,8 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
-  schedule:
-    - cron: "0 6 * * 1" # Weekly Monday 6am UTC
 
 jobs:
-  # ---------------------------------------------------------------
-  # Phase 1: Output determinism — no LLM required.
-  # Runs on every push/PR and is the CI gate for NFR6 compliance.
-  # ---------------------------------------------------------------
   output-determinism:
     runs-on: ubuntu-latest
     permissions:
@@ -64,7 +62,7 @@ jobs:
           name: phase1-results
           path: results/
 
-      - name: Check NFR6 threshold (Phase 1)
+      - name: Check NFR6 threshold
         run: |
           python -c "
           import json, sys
@@ -79,92 +77,3 @@ jobs:
               print(f\"  {a['tool']}: {s_str} ({a['nfr6_contribution'].upper()})\")
           sys.exit(0 if verdict == 'PASS' else 1)
           "
-
-  # ---------------------------------------------------------------
-  # Phase 2: LLM integration quality — advisory only.
-  # Runs on workflow_dispatch or weekly schedule. Never blocks PRs.
-  # ---------------------------------------------------------------
-  llm-determinism:
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    permissions:
-      contents: read
-
-    services:
-      ollama:
-        image: ollama/ollama:latest
-        ports:
-          - 11434:11434
-
-    steps:
-      - name: Checkout with submodules
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Install Python dependencies
-        run: |
-          pip install -r eval/detllm/requirements.txt
-          pip install -r eval/mcp-eval/requirements.txt
-
-      - name: Install Node.js dependencies
-        run: cd eval/mcpevals && npm install
-
-      - name: Install Promptfoo
-        run: npm install -g promptfoo
-
-      - name: Build gemara-mcp image
-        run: |
-          docker build -t ghcr.io/gemaraproj/gemara-mcp:v0.1.0 \
-            reference/gemara-mcp/
-
-      - name: Pull Ollama model
-        run: |
-          for i in $(seq 1 30); do
-            curl -sf http://localhost:11434/api/tags > /dev/null && break
-            echo "Waiting for Ollama to be ready... ($i)"
-            sleep 2
-          done
-          curl -sf http://localhost:11434/api/tags > /dev/null || \
-            { echo "Ollama never became ready"; exit 1; }
-          echo "Pulling qwen2.5:7b model..."
-          curl -sf http://localhost:11434/api/pull \
-            -d '{"name":"qwen2.5:7b"}' | tail -1
-          echo "Model pull complete."
-
-      - name: Run Phase 2 evaluations
-        env:
-          GEMARA_MCP_IMAGE: ghcr.io/gemaraproj/gemara-mcp:v0.1.0
-          CONTAINER_RUNTIME: docker
-          OLLAMA_BASE_URL: http://localhost:11434
-          OLLAMA_MODEL: qwen2.5:7b
-        run: make eval-phase2
-
-      - name: Run Promptfoo correctness (informational)
-        if: always()
-        continue-on-error: true
-        env:
-          OLLAMA_BASE_URL: http://localhost:11434
-          OLLAMA_MODEL: qwen2.5:7b
-        run: make eval-correctness
-
-      - name: Generate Phase 2 advisory report
-        run: make report-phase2
-
-      - name: Upload Phase 2 results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: phase2-results
-          path: results/

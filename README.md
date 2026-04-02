@@ -138,12 +138,12 @@ gemara-mcp-eval/
 
 ## CI
 
-`.github/workflows/determinism-check.yml` defines two jobs:
+Two separate workflow files keep the NFR6 gate and the long-running advisory job completely independent:
 
-| Job | Triggers | Blocks PRs |
-|---|---|---|
-| `output-determinism` (Phase 1) | push, pull_request, workflow_dispatch | Yes — exits 1 on FAIL |
-| `llm-determinism` (Phase 2) | workflow_dispatch, weekly schedule | No — `continue-on-error: true` |
+| Workflow | File | Triggers | Blocks PRs |
+|---|---|---|---|
+| NFR6 — Output Determinism (Phase 1) | `determinism-check.yml` | push, pull_request, workflow_dispatch | Yes — exits 1 on FAIL |
+| LLM Advisory — Phase 2 | `llm-advisory.yml` | workflow_dispatch, weekly schedule | No — `continue-on-error: true` |
 
 ---
 
