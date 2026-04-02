@@ -1,4 +1,4 @@
-.PHONY: all corpus-validate eval-phase1 eval-all eval-detllm eval-deepeval eval-mcpevals eval-mcp-eval eval-dfah eval-promptfoo eval-correctness report report-phase1 clean
+.PHONY: all corpus-validate eval-phase1 eval-phase2 eval-all eval-full eval-detllm eval-deepeval eval-mcpevals eval-mcp-eval eval-dfah eval-promptfoo eval-correctness report report-phase1 report-phase2 clean
 
 -include .env
 export
@@ -88,14 +88,30 @@ eval-all: eval-phase1
 
 eval-phase1: eval-dfah eval-mcp-eval
 
+eval-phase2: eval-detllm eval-deepeval eval-mcpevals eval-promptfoo
+
+eval-full: eval-phase1 eval-phase2
+
 # --- Analysis ---
 
 report: $(RESULTS_DIR)
 	@echo "==> Generating NFR6 compliance report..."
-	python3 $(ANALYSIS_DIR)/nfr6_report.py \
-		--results-dir $(RESULTS_DIR) \
-		--threshold 0.9 \
-		--output $(RESULTS_DIR)/nfr6-report.json
+	@if [ -f $(RESULTS_DIR)/nfr6-phase1-report.json ] && [ -f $(RESULTS_DIR)/nfr6-phase2-report.json ]; then \
+		echo "Merging Phase 1 + Phase 2 reports..."; \
+		python3 $(ANALYSIS_DIR)/nfr6_report.py \
+			--merge \
+			--phase1-report $(RESULTS_DIR)/nfr6-phase1-report.json \
+			--phase2-report $(RESULTS_DIR)/nfr6-phase2-report.json \
+			--output $(RESULTS_DIR)/nfr6-report.json; \
+	elif [ -f $(RESULTS_DIR)/nfr6-phase1-report.json ]; then \
+		echo "Using Phase 1 report (Phase 2 not run)..."; \
+		cp $(RESULTS_DIR)/nfr6-phase1-report.json $(RESULTS_DIR)/nfr6-report.json; \
+	else \
+		python3 $(ANALYSIS_DIR)/nfr6_report.py \
+			--results-dir $(RESULTS_DIR) \
+			--threshold 0.9 \
+			--output $(RESULTS_DIR)/nfr6-report.json; \
+	fi
 	@echo "==> NFR6 report: $(RESULTS_DIR)/nfr6-report.json"
 
 report-phase1: $(RESULTS_DIR)
@@ -106,6 +122,14 @@ report-phase1: $(RESULTS_DIR)
 		--threshold 0.9 \
 		--output $(RESULTS_DIR)/nfr6-phase1-report.json
 	@echo "==> Phase 1 NFR6 report: $(RESULTS_DIR)/nfr6-phase1-report.json"
+
+report-phase2: $(RESULTS_DIR)
+	@echo "==> Generating Phase 2 advisory report (LLM integration quality)..."
+	python3 $(ANALYSIS_DIR)/nfr6_report.py \
+		--phase 2 \
+		--results-dir $(RESULTS_DIR) \
+		--output $(RESULTS_DIR)/nfr6-phase2-report.json
+	@echo "==> Phase 2 advisory report: $(RESULTS_DIR)/nfr6-phase2-report.json"
 
 compare:
 	python3 $(ANALYSIS_DIR)/compare_results.py \

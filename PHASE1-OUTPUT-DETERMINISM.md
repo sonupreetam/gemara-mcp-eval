@@ -227,17 +227,15 @@ No Ollama, no Vertex AI, no OpenAI, no Node.js.
 
 ## Adding Phase 2 (LLM Advisory)
 
-Phase 2 lives in the `feat/phase2-report` branch, which is built on top of this one. It adds LLM integration quality tooling (detLLM, MCP Evals, Promptfoo) whose results are tagged `advisory: true` and never affect the NFR6 verdict.
+Phase 2 is available on this branch (`feat/phase2-report`). It adds LLM integration quality tooling (detLLM, MCP Evals, Promptfoo) whose results are tagged `advisory: true` and never affect the NFR6 verdict.
 
 ```bash
-git checkout feat/phase2-report
-
-make eval-phase2        # requires Ollama / Vertex AI / OpenAI + Node.js
+make eval-phase2        # requires Ollama + Node.js
 make report-phase2      # produces results/nfr6-phase2-report.json
 make report             # merges phase1 + phase2 into results/nfr6-report.json
 ```
 
-See the Phase 2 branch for its own documentation.
+See [PHASE2-LLM-DETERMINISM.md](./PHASE2-LLM-DETERMINISM.md) for full details.
 
 ---
 

@@ -1,0 +1,197 @@
+name: "LLM Advisory — Phase 2 (Advisory)"
+
+# LLM integration quality evaluation. Advisory only — never blocks a PR.
+# Results are informational and do not affect the NFR6 verdict.
+#
+# Requires: Ollama (qwen2.5:7b), Node.js, Docker.
+# Runtime: typically 20–40 minutes due to repeated LLM calls.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1" # Weekly Monday 6am UTC
+
+jobs:
+  llm-determinism:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      contents: read
+
+    services:
+      ollama:
+        image: ollama/ollama:latest
+        ports:
+          - 11434:11434
+
+    steps:
+      - name: Checkout with submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Python dependencies
+        run: |
+          pip install -r eval/detllm/requirements.txt
+          pip install -r eval/deepeval/requirements.txt
+          pip install -r eval/mcp-eval/requirements.txt
+
+      - name: Install Node.js dependencies
+        run: cd eval/mcpevals && npm install
+
+      - name: Install Promptfoo
+        run: npm install -g promptfoo
+
+      - name: Build gemara-mcp image
+        run: |
+          docker build -t ghcr.io/gemaraproj/gemara-mcp:v0.1.0 \
+            reference/gemara-mcp/
+
+      - name: Pull Ollama model
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:11434/api/tags > /dev/null && break
+            echo "Waiting for Ollama to be ready... ($i)"
+            sleep 2
+          done
+          curl -sf http://localhost:11434/api/tags > /dev/null || \
+            { echo "Ollama never became ready"; exit 1; }
+          echo "Pulling qwen2.5:7b model..."
+          curl -sf http://localhost:11434/api/pull \
+            -d '{"name":"qwen2.5:7b"}' | tail -1
+          echo "Model pull complete."
+
+      # --- Per-harness steps ordered fastest → slowest so early results
+      #     are available while heavier harnesses are still running.
+      #
+      # Estimated LLM call volume:
+      #   promptfoo      ~4 calls  (simple contains assertions, no judge)
+      #   detllm         ~5×N      (5 runs per corpus prompt, direct calls)
+      #   mcpevals       ~9×5      (9 cases × 5 scoring dimensions, LLM judge)
+      #   deepeval       high      (multi-run + GEval LLM-as-judge, slowest)
+      #   promptfoo-correctness    (informational, always last)
+
+      - name: "Harness: promptfoo determinism"
+        if: always()
+        continue-on-error: true
+        id: promptfoo
+        env:
+          OLLAMA_BASE_URL: http://localhost:11434
+          OLLAMA_MODEL: qwen2.5:7b
+        run: make eval-promptfoo
+
+      - name: Upload promptfoo determinism results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase2-promptfoo
+          path: results/promptfoo.json
+          if-no-files-found: warn
+
+      - name: "Harness: detllm"
+        if: always()
+        continue-on-error: true
+        id: detllm
+        env:
+          GEMARA_MCP_IMAGE: ghcr.io/gemaraproj/gemara-mcp:v0.1.0
+          CONTAINER_RUNTIME: docker
+          OLLAMA_BASE_URL: http://localhost:11434
+          OLLAMA_MODEL: qwen2.5:7b
+        run: make eval-detllm
+
+      - name: Upload detllm results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase2-detllm
+          path: results/detllm.json
+          if-no-files-found: warn
+
+      - name: "Harness: mcpevals"
+        if: always()
+        continue-on-error: true
+        id: mcpevals
+        env:
+          GEMARA_MCP_IMAGE: ghcr.io/gemaraproj/gemara-mcp:v0.1.0
+          CONTAINER_RUNTIME: docker
+          OLLAMA_BASE_URL: http://localhost:11434
+          OLLAMA_MODEL: qwen2.5:7b
+        run: make eval-mcpevals
+
+      - name: Upload mcpevals results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase2-mcpevals
+          path: results/mcpevals.json
+          if-no-files-found: warn
+
+      - name: "Harness: deepeval"
+        if: always()
+        continue-on-error: true
+        id: deepeval
+        timeout-minutes: 30
+        env:
+          GEMARA_MCP_IMAGE: ghcr.io/gemaraproj/gemara-mcp:v0.1.0
+          CONTAINER_RUNTIME: docker
+          OLLAMA_BASE_URL: http://localhost:11434
+          OLLAMA_MODEL: qwen2.5:7b
+        run: make eval-deepeval
+
+      - name: Upload deepeval results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase2-deepeval
+          path: results/deepeval.json
+          if-no-files-found: warn
+
+      - name: "Harness: promptfoo correctness (informational)"
+        if: always()
+        continue-on-error: true
+        id: promptfoo-correctness
+        env:
+          OLLAMA_BASE_URL: http://localhost:11434
+          OLLAMA_MODEL: qwen2.5:7b
+        run: make eval-correctness
+
+      - name: Upload promptfoo correctness results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase2-promptfoo-correctness
+          path: results/promptfoo-correctness.json
+          if-no-files-found: warn
+
+      - name: Generate Phase 2 advisory report
+        if: always()
+        run: make report-phase2
+
+      - name: Upload Phase 2 combined report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase2-report
+          path: results/nfr6-phase2-report.json
+          if-no-files-found: warn
+
+      - name: Print Phase 2 harness summary
+        if: always()
+        run: |
+          echo "| Harness              | Outcome |"
+          echo "|----------------------|---------|"
+          echo "| detllm               | ${{ steps.detllm.outcome }} |"
+          echo "| deepeval             | ${{ steps.deepeval.outcome }} |"
+          echo "| mcpevals             | ${{ steps.mcpevals.outcome }} |"
+          echo "| promptfoo            | ${{ steps.promptfoo.outcome }} |"
+          echo "| promptfoo-correctness| ${{ steps.promptfoo-correctness.outcome }} |"
