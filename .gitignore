@@ -1,4 +1,4 @@
-results/
+results/*
 !results/.gitkeep
 __pycache__/
 *.pyc
