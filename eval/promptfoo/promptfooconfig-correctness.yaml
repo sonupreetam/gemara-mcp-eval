@@ -1,0 +1,44 @@
+description: "gemara-mcp functional correctness suite"
+
+prompts:
+  - id: validate-artifact
+    raw: |
+      Validate the following YAML artifact against the Gemara {{definition}} schema.
+      Return the validation result as JSON with fields: valid (boolean), errors (array), message (string).
+
+      Artifact content:
+      ```yaml
+      {{artifact_content}}
+      ```
+
+providers:
+  - id: "ollama:chat:qwen2.5:7b"
+    config:
+      temperature: 0
+    timeout: 180000
+
+defaultTest:
+  options:
+    runSerially: true
+    timeout: 180000
+
+tests:
+  # --- Boundary / edge-case correctness ---
+
+  - description: "tc-C01: Empty input fails validation"
+    vars:
+      definition: "#ControlCatalog"
+      artifact_content: ""
+    assert:
+      - type: contains
+        value: "false"
+
+  - description: "tc-C02: Whitespace-only input fails validation"
+    vars:
+      definition: "#ControlCatalog"
+      artifact_content: "   "
+    assert:
+      - type: contains
+        value: "false"
+
+outputPath: ../../results/promptfoo-correctness.json

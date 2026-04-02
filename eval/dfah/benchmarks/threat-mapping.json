@@ -20,7 +20,7 @@
     "id": "tm-002",
     "description": "CI/CD supply chain threats",
     "input": "Create a threat catalog for a CI/CD pipeline pulling base images from public registries without signing.",
-    "component": "CI/CD Pipeline with Container Registry",
+    "component": "CICD Pipeline with Container Registry",
     "id_prefix": "CICD",
     "definition": "#ThreatCatalog",
     "match_type": "jaccard",

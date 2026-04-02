@@ -27,13 +27,13 @@
   },
   {
     "id": "tc-002",
-    "name": "Validate ControlCatalog missing required group",
+    "name": "Validate ControlCatalog with wrong metadata type",
     "steps": [
       {
         "action": "call_tool",
         "tool": "validate_gemara_artifact",
         "arguments": {
-          "artifact_content": "metadata:\n  id: EVAL-BAD\n  type: ControlCatalog\n  gemara-version: \"1.0\"\n  description: |\n    A control catalog with a control referencing a non-existent group.\n  author:\n    id: eval-harness\n    name: Evaluation Harness\n    type: Software\ntitle: Invalid Control Catalog\ngroups:\n  - id: data-protection\n    title: Data Protection\n    description: Controls ensuring data confidentiality and integrity.\ncontrols:\n  - id: EVAL-BAD.C01\n    group: nonexistent-group\n    title: Broken Control\n    state: Active\n    objective: |\n      This control references a group that does not exist in the groups list.\n    assessment-requirements:\n      - id: EVAL-BAD.C01.TR01\n        state: Active\n        text: |\n          When invoked, the service MUST respond within 5 seconds.\n        applicability:\n          - standard\n",
+          "artifact_content": "metadata:\n  id: EVAL-BAD\n  type: ThreatCatalog\n  gemara-version: \"1.0\"\n  description: |\n    A ControlCatalog with the wrong metadata.type \u2014 validated against\n    #ControlCatalog, which must reject the ThreatCatalog type value.\n  author:\n    id: eval-harness\n    name: Evaluation Harness\n    type: Software\ntitle: Invalid Control Catalog (Wrong Type)\ngroups:\n  - id: data-protection\n    title: Data Protection\n    description: Controls for data integrity.\ncontrols:\n  - id: EVAL-BAD.C01\n    group: data-protection\n    title: Placeholder Control\n    state: Active\n    objective: |\n      This control exists solely to test type-mismatch detection.\n      The metadata.type is ThreatCatalog but the definition is #ControlCatalog.\n    assessment-requirements:\n      - id: EVAL-BAD.C01.TR01\n        state: Active\n        text: |\n          When invoked, the service MUST verify the artifact type matches\n          the requested schema definition.\n        applicability:\n          - standard\n",
           "definition": "#ControlCatalog"
         },
         "assertions": [
@@ -137,16 +137,16 @@
         "action": "invoke_prompt",
         "prompt": "threat_assessment",
         "arguments": {
-          "COMPONENT": "Multi-tenant Kubernetes PII Processing Platform",
-          "ID_PREFIX": "K8S-PII"
+          "component": "Multi-tenant Kubernetes PII Processing Platform",
+          "id_prefix": "K8S-PII"
         },
         "assertions": [
           {
             "type": "contains_any",
             "values": [
-              "data exfiltration",
-              "tenant isolation breach",
-              "unauthorized access"
+              "K8S-PII",
+              "ThreatCatalog",
+              "Multi-tenant Kubernetes"
             ]
           }
         ]
@@ -154,8 +154,8 @@
     ],
     "determinism": {
       "runs": 20,
-      "match_type": "jaccard",
-      "threshold": 0.8
+      "match_type": "exact",
+      "threshold": 1.0
     }
   },
   {
@@ -166,16 +166,16 @@
         "action": "invoke_prompt",
         "prompt": "threat_assessment",
         "arguments": {
-          "COMPONENT": "CI/CD Pipeline with Container Registry",
-          "ID_PREFIX": "CICD"
+          "component": "CICD Pipeline with Container Registry",
+          "id_prefix": "CICD"
         },
         "assertions": [
           {
             "type": "contains_any",
             "values": [
-              "supply chain compromise",
-              "image tampering",
-              "malicious dependency"
+              "CICD",
+              "ThreatCatalog",
+              "CICD Pipeline"
             ]
           }
         ]
@@ -183,8 +183,8 @@
     ],
     "determinism": {
       "runs": 20,
-      "match_type": "jaccard",
-      "threshold": 0.8
+      "match_type": "exact",
+      "threshold": 1.0
     }
   },
   {
@@ -195,16 +195,16 @@
         "action": "invoke_prompt",
         "prompt": "threat_assessment",
         "arguments": {
-          "COMPONENT": "Cloud Object Storage Service",
-          "ID_PREFIX": "OBJ-STORE"
+          "component": "Cloud Object Storage Service",
+          "id_prefix": "OBJ-STORE"
         },
         "assertions": [
           {
             "type": "contains_any",
             "values": [
-              "data loss",
-              "unauthorized access",
-              "data replication to untrusted location"
+              "OBJ-STORE",
+              "ThreatCatalog",
+              "Cloud Object Storage"
             ]
           }
         ]
@@ -212,8 +212,8 @@
     ],
     "determinism": {
       "runs": 20,
-      "match_type": "jaccard",
-      "threshold": 0.8
+      "match_type": "exact",
+      "threshold": 1.0
     }
   },
   {
@@ -224,16 +224,16 @@
         "action": "invoke_prompt",
         "prompt": "threat_assessment",
         "arguments": {
-          "COMPONENT": "Public-facing API Gateway",
-          "ID_PREFIX": "APIGW"
+          "component": "Public-facing API Gateway",
+          "id_prefix": "APIGW"
         },
         "assertions": [
           {
             "type": "contains_any",
             "values": [
-              "denial of service",
-              "injection attack",
-              "authentication bypass"
+              "APIGW",
+              "ThreatCatalog",
+              "API Gateway"
             ]
           }
         ]
@@ -241,8 +241,8 @@
     ],
     "determinism": {
       "runs": 20,
-      "match_type": "jaccard",
-      "threshold": 0.8
+      "match_type": "exact",
+      "threshold": 1.0
     }
   },
   {
@@ -253,16 +253,16 @@
         "action": "invoke_prompt",
         "prompt": "threat_assessment",
         "arguments": {
-          "COMPONENT": "Centralized Secrets Management Vault",
-          "ID_PREFIX": "VAULT"
+          "component": "Centralized Secrets Management Vault",
+          "id_prefix": "VAULT"
         },
         "assertions": [
           {
             "type": "contains_any",
             "values": [
-              "credential theft",
-              "unauthorized secret access",
-              "key compromise"
+              "VAULT",
+              "ThreatCatalog",
+              "Secrets Management"
             ]
           }
         ]
@@ -270,8 +270,8 @@
     ],
     "determinism": {
       "runs": 20,
-      "match_type": "jaccard",
-      "threshold": 0.8
+      "match_type": "exact",
+      "threshold": 1.0
     }
   },
   {
@@ -282,16 +282,16 @@
         "action": "invoke_prompt",
         "prompt": "control_catalog",
         "arguments": {
-          "COMPONENT": "Kubernetes Workload Protection",
-          "ID_PREFIX": "K8S-WP"
+          "component": "Kubernetes Workload Protection",
+          "id_prefix": "K8S-WP"
         },
         "assertions": [
           {
             "type": "contains_any",
             "values": [
-              "encryption in transit",
-              "network policy enforcement",
-              "pod security"
+              "K8S-WP",
+              "ControlCatalog",
+              "Kubernetes Workload"
             ]
           }
         ]
@@ -299,8 +299,8 @@
     ],
     "determinism": {
       "runs": 20,
-      "match_type": "jaccard",
-      "threshold": 0.8
+      "match_type": "exact",
+      "threshold": 1.0
     }
   },
   {
@@ -311,16 +311,16 @@
         "action": "invoke_prompt",
         "prompt": "control_catalog",
         "arguments": {
-          "COMPONENT": "Enterprise Audit Logging Platform",
-          "ID_PREFIX": "AUDIT"
+          "component": "Enterprise Audit Logging Platform",
+          "id_prefix": "AUDIT"
         },
         "assertions": [
           {
             "type": "contains_any",
             "values": [
-              "log integrity",
-              "log access restriction",
-              "log retention"
+              "AUDIT",
+              "ControlCatalog",
+              "Audit Logging"
             ]
           }
         ]
@@ -328,8 +328,8 @@
     ],
     "determinism": {
       "runs": 20,
-      "match_type": "jaccard",
-      "threshold": 0.8
+      "match_type": "exact",
+      "threshold": 1.0
     }
   },
   {
@@ -340,16 +340,16 @@
         "action": "invoke_prompt",
         "prompt": "control_catalog",
         "arguments": {
-          "COMPONENT": "Cloud IAM Service",
-          "ID_PREFIX": "IAM"
+          "component": "Cloud IAM Service",
+          "id_prefix": "IAM"
         },
         "assertions": [
           {
             "type": "contains_any",
             "values": [
-              "multi-factor authentication",
-              "least privilege",
-              "credential rotation"
+              "IAM",
+              "ControlCatalog",
+              "Cloud IAM"
             ]
           }
         ]
@@ -357,8 +357,8 @@
     ],
     "determinism": {
       "runs": 20,
-      "match_type": "jaccard",
-      "threshold": 0.8
+      "match_type": "exact",
+      "threshold": 1.0
     }
   },
   {
@@ -369,16 +369,16 @@
         "action": "invoke_prompt",
         "prompt": "control_catalog",
         "arguments": {
-          "COMPONENT": "Data Encryption Key Management Service",
-          "ID_PREFIX": "ENC-KMS"
+          "component": "Data Encryption Key Management Service",
+          "id_prefix": "ENC-KMS"
         },
         "assertions": [
           {
             "type": "contains_any",
             "values": [
-              "encryption at rest",
-              "key rotation",
-              "key access control"
+              "ENC-KMS",
+              "ControlCatalog",
+              "Key Management"
             ]
           }
         ]
@@ -386,8 +386,8 @@
     ],
     "determinism": {
       "runs": 20,
-      "match_type": "jaccard",
-      "threshold": 0.8
+      "match_type": "exact",
+      "threshold": 1.0
     }
   },
   {
@@ -398,16 +398,16 @@
         "action": "invoke_prompt",
         "prompt": "control_catalog",
         "arguments": {
-          "COMPONENT": "Container Image Build and Distribution Pipeline",
-          "ID_PREFIX": "IMG-SC"
+          "component": "Container Image Build and Distribution Pipeline",
+          "id_prefix": "IMG-SC"
         },
         "assertions": [
           {
             "type": "contains_any",
             "values": [
-              "image signing",
-              "vulnerability scanning",
-              "base image provenance"
+              "IMG-SC",
+              "ControlCatalog",
+              "Container Image"
             ]
           }
         ]
@@ -415,8 +415,8 @@
     ],
     "determinism": {
       "runs": 20,
-      "match_type": "jaccard",
-      "threshold": 0.8
+      "match_type": "exact",
+      "threshold": 1.0
     }
   }
 ]

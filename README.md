@@ -2,88 +2,92 @@
 
 Determinism evaluation framework for [gemara-mcp](https://github.com/gemaraproj/gemara-mcp) — measuring NFR6 compliance (90% deterministic outcomes for artifact generation).
 
-## Overview
+## NFR6 Objective
 
-This repo evaluates all gemara-mcp tools, prompts, and resources using six evaluation frameworks:
+> The combination of the Context Tool and CUE Validation must ensure at least 90% deterministic outcomes for artifact generation.
 
-| Framework | Focus | Language |
+"Deterministic outcomes" means: given the same input, the gemara-mcp server returns the **same output every time**. This is a property of the server, not of the LLM querying it.
+
+## Evaluation Phases
+
+The framework is split into two phases with a strict separation of concerns:
+
+| Phase | Branch | Purpose | NFR6 role |
+|---|---|---|---|
+| **Phase 1** | `feat/phase1-report` | Output determinism — no LLM | **NFR6 gate** |
+| **Phase 2** | `feat/phase2-report` | LLM integration quality | Advisory only |
+
+### Phase 1 — Output Determinism
+
+Measures whether gemara-mcp produces identical outputs for identical inputs across 20 repeated runs. No LLM is involved at any stage.
+
+| Tool | What it measures | Runs per scenario |
 |---|---|---|
-| **detLLM** | Raw LLM determinism (Tier 0/1/2) | Python |
-| **DeepEval** | MCP tool selection + output quality | Python |
-| **MCP Evals** | LLM-scored tool response quality | Node.js |
-| **mcp-eval** | Language-agnostic MCP scenario testing | Python |
-| **DFAH** | Trajectory determinism + faithfulness (adapted from IBM) | Python |
-| **Promptfoo** | Assertion-based regression testing | Node.js |
+| **DFAH** | Trajectory determinism + faithfulness via direct MCP calls | 20 |
+| **mcp-eval** | Full MCP surface (tool + prompt) with exact-match across repeated runs | 20 |
 
-All frameworks share a single test corpus (`corpus/`) to ensure consistent measurement.
+**This is the NFR6 gate.** Phase 1 alone determines pass/fail.
 
-## gemara-mcp Surface Under Test
+See [PHASE1-OUTPUT-DETERMINISM.md](./PHASE1-OUTPUT-DETERMINISM.md) for full details on tools, scoring, corpus, and CI.
 
-- **Tool**: `validate_gemara_artifact` — validate YAML against Gemara CUE schemas
-- **Resources**: `gemara://lexicon`, `gemara://schema/definitions`, `gemara://schema/definitions{?version}`
-- **Prompts** (artifact mode): `threat_assessment`, `control_catalog`
+### Phase 2 — LLM Integration Quality
 
-## Prerequisites
+Measures how well the LLM layer works with gemara-mcp. Results are advisory — they inform quality but do not affect the NFR6 verdict.
 
-- Go 1.22+ (to build gemara-mcp)
-- Python 3.10+
-- Node.js 20+
-- Docker & Docker Compose
-- [CUE CLI](https://cuelang.org/docs/install/)
+| Tool | What it measures | Needs LLM |
+|---|---|---|
+| **detLLM** | Raw LLM output consistency across repeated calls | Yes |
+| **MCP Evals** | LLM-scored tool response quality (accuracy, completeness, clarity) | Yes (LLM-as-judge) |
+| **Promptfoo** | Assertion-based regression testing | Yes |
+
+Phase 2 adds on top of Phase 1 — switch to `feat/phase2-report` when LLM infrastructure is available.
+
+---
 
 ## Quick Start
 
 ```bash
-# Clone with submodules
 git clone --recurse-submodules https://github.com/<your-user>/gemara-mcp-eval.git
 cd gemara-mcp-eval
+git checkout feat/phase1-report
 
-# Start gemara-mcp server
-docker compose up -d
+pip install -r eval/dfah/requirements.txt
+pip install -r eval/mcp-eval/requirements.txt
 
-# Validate the test corpus
 make corpus-validate
-
-# Run all evaluations
-make eval-all
-
-# Generate NFR6 report
-make report
+make eval-phase1
+make report-phase1
 ```
 
-## Running Individual Evaluations
+No LLM, no Ollama, no Node.js needed for Phase 1.
 
-```bash
-make eval-detllm       # Raw LLM determinism
-make eval-deepeval     # MCP tool selection + determinism
-make eval-mcpevals     # LLM-scored quality
-make eval-mcp-eval     # Scenario replay
-make eval-dfah         # Trajectory determinism (DFAH)
-make eval-promptfoo    # Regression assertions
-```
+---
 
 ## Repo Structure
 
 ```
 gemara-mcp-eval/
-├── reference/          # Pinned submodules (gemara schemas, gemara-mcp server)
-├── corpus/             # Shared test corpus (scenarios, inputs, golden outputs, prompts)
-├── eval/               # Per-tool evaluation harnesses
-│   ├── detllm/
-│   ├── deepeval/
-│   ├── mcpevals/
-│   ├── mcp-eval/
-│   ├── dfah/
-│   └── promptfoo/
-├── analysis/           # Cross-tool comparison and NFR6 reporting
-└── ci/                 # CI/CD (Dockerfile, GitHub Actions)
+├── reference/              # Pinned submodules (Gemara schemas + gemara-mcp server)
+├── corpus/
+│   ├── scenarios.yaml      # 15 scenarios shared by all harnesses
+│   └── inputs/             # YAML artifact files for tool scenarios
+├── eval/
+│   ├── shared/             # Shared MCP stdio client (Python)
+│   ├── dfah/               # DFAH harness + benchmarks
+│   └── mcp-eval/           # mcp-eval scenario runner
+├── analysis/
+│   └── nfr6_report.py      # NFR6 report generator
+└── results/                # Generated at runtime (gitignored)
 ```
 
-## NFR6 Target
+---
 
-> The combination of the Context Tool and CUE Validation must ensure at least 90% deterministic outcomes for artifact generation.
+## gemara-mcp Surface Under Test
 
-The `make report` target aggregates results from all six tools and produces a pass/fail verdict against the 90% threshold.
+- **Tool**: `validate_gemara_artifact` — validate YAML against Gemara CUE schemas (`#ControlCatalog`, `#ThreatCatalog`, `#Policy`, `#EvaluationLog`)
+- **Prompts**: `threat_assessment`, `control_catalog` — template-rendered content keyed by `component` and `id_prefix`
+
+---
 
 ## Related
 

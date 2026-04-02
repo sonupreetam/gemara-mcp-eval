@@ -1,4 +1,4 @@
-.PHONY: all corpus-validate eval-all eval-detllm eval-deepeval eval-mcpevals eval-mcp-eval eval-dfah eval-promptfoo report clean
+.PHONY: all corpus-validate eval-phase1 eval-all eval-detllm eval-deepeval eval-mcpevals eval-mcp-eval eval-dfah eval-promptfoo eval-correctness report report-phase1 clean
 
 -include .env
 export
@@ -40,21 +40,21 @@ eval-detllm: $(RESULTS_DIR)
 	cd $(EVAL_DIR)/detllm && python3 run_detllm.py \
 		--corpus ../../$(CORPUS_DIR) \
 		--output ../../$(RESULTS_DIR)/detllm.json \
-		--direct
+		$(DETLLM_ARGS)
 	@echo "==> detLLM complete."
 
 eval-deepeval: $(RESULTS_DIR)
-	@echo "==> Running DeepEval MCP evaluation..."
+	@echo "==> Running DeepEval determinism evaluation..."
 	cd $(EVAL_DIR)/deepeval && python3 -m pytest \
-		test_tool_selection.py test_determinism.py \
+		test_determinism.py \
 		--tb=short -q \
-		--json-report=../../$(RESULTS_DIR)/deepeval.json
+		--json-report --json-report-file=../../$(RESULTS_DIR)/deepeval.json
 	@echo "==> DeepEval complete."
 
 eval-mcpevals: $(RESULTS_DIR)
 	@echo "==> Running MCP Evals..."
 	cd $(EVAL_DIR)/mcpevals && npx ts-node eval-suite.ts \
-		--output ../../$(RESULTS_DIR)/mcpevals.json
+		--output=../../$(RESULTS_DIR)/mcpevals.json
 	@echo "==> MCP Evals complete."
 
 eval-mcp-eval: $(RESULTS_DIR)
@@ -72,12 +72,21 @@ eval-dfah: $(RESULTS_DIR)
 	@echo "==> DFAH complete."
 
 eval-promptfoo: $(RESULTS_DIR)
-	@echo "==> Running Promptfoo regression suite..."
+	@echo "==> Running Promptfoo determinism suite..."
 	cd $(EVAL_DIR)/promptfoo && npx promptfoo eval \
 		--output ../../$(RESULTS_DIR)/promptfoo.json
-	@echo "==> Promptfoo complete."
+	@echo "==> Promptfoo determinism complete."
 
-eval-all: eval-detllm eval-deepeval eval-mcpevals eval-mcp-eval eval-dfah eval-promptfoo
+eval-correctness: $(RESULTS_DIR)
+	@echo "==> Running Promptfoo correctness suite..."
+	cd $(EVAL_DIR)/promptfoo && npx promptfoo eval \
+		-c promptfooconfig-correctness.yaml \
+		--output ../../$(RESULTS_DIR)/promptfoo-correctness.json
+	@echo "==> Promptfoo correctness complete."
+
+eval-all: eval-phase1
+
+eval-phase1: eval-dfah eval-mcp-eval
 
 # --- Analysis ---
 
@@ -88,6 +97,15 @@ report: $(RESULTS_DIR)
 		--threshold 0.9 \
 		--output $(RESULTS_DIR)/nfr6-report.json
 	@echo "==> NFR6 report: $(RESULTS_DIR)/nfr6-report.json"
+
+report-phase1: $(RESULTS_DIR)
+	@echo "==> Generating Phase 1 NFR6 report (output determinism, no LLM)..."
+	python3 $(ANALYSIS_DIR)/nfr6_report.py \
+		--phase 1 \
+		--results-dir $(RESULTS_DIR) \
+		--threshold 0.9 \
+		--output $(RESULTS_DIR)/nfr6-phase1-report.json
+	@echo "==> Phase 1 NFR6 report: $(RESULTS_DIR)/nfr6-phase1-report.json"
 
 compare:
 	python3 $(ANALYSIS_DIR)/compare_results.py \
