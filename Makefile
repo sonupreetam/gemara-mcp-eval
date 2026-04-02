@@ -88,7 +88,7 @@ eval-all: eval-phase1
 
 eval-phase1: eval-dfah eval-mcp-eval
 
-eval-phase2: eval-detllm eval-mcpevals eval-promptfoo
+eval-phase2: eval-detllm eval-deepeval eval-mcpevals eval-promptfoo
 
 eval-full: eval-phase1 eval-phase2
 

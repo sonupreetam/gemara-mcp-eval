@@ -46,21 +46,62 @@ jobs:
       - name: Validate corpus
         run: make corpus-validate
 
-      - name: Run Phase 1 evaluations
+      # --- Per-harness steps — both always run and upload independently
+      #     so a partial failure still produces usable results.
+
+      - name: "Harness: dfah"
+        if: always()
+        continue-on-error: true
+        id: dfah
         env:
           GEMARA_MCP_IMAGE: ghcr.io/gemaraproj/gemara-mcp:v0.1.0
           CONTAINER_RUNTIME: docker
-        run: make eval-phase1
+        run: make eval-dfah
+
+      - name: Upload dfah results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase1-dfah
+          path: results/dfah.json
+          if-no-files-found: warn
+
+      - name: "Harness: mcp-eval"
+        if: always()
+        continue-on-error: true
+        id: mcp-eval
+        env:
+          GEMARA_MCP_IMAGE: ghcr.io/gemaraproj/gemara-mcp:v0.1.0
+          CONTAINER_RUNTIME: docker
+        run: make eval-mcp-eval
+
+      - name: Upload mcp-eval results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase1-mcp-eval
+          path: results/mcp-eval.json
+          if-no-files-found: warn
+
+      - name: Print Phase 1 harness summary
+        if: always()
+        run: |
+          echo "| Harness  | Outcome |"
+          echo "|----------|---------|"
+          echo "| dfah     | ${{ steps.dfah.outcome }} |"
+          echo "| mcp-eval | ${{ steps['mcp-eval'].outcome }} |"
 
       - name: Generate Phase 1 NFR6 report
+        if: always()
         run: make report-phase1
 
-      - name: Upload Phase 1 results
-        uses: actions/upload-artifact@v4
+      - name: Upload Phase 1 NFR6 report
         if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: phase1-results
-          path: results/
+          name: phase1-report
+          path: results/nfr6-phase1-report.json
+          if-no-files-found: warn
 
       - name: Check NFR6 threshold
         run: |
