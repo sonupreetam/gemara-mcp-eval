@@ -84,6 +84,7 @@ eval-correctness: $(RESULTS_DIR)
 		--output ../../$(RESULTS_DIR)/promptfoo-correctness.json
 	@echo "==> Promptfoo correctness complete."
 
+eval-all: eval-detllm eval-deepeval eval-mcpevals eval-mcp-eval eval-dfah
 eval-all: eval-phase1
 
 eval-phase1: eval-dfah eval-mcp-eval
