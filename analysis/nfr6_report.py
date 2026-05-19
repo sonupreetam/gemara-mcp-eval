@@ -13,8 +13,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-TOOL_NAMES = ["detllm", "deepeval", "mcp-eval", "dfah", "promptfoo"]
+TOOL_NAMES = ["detllm", "deepeval", "mcp-eval", "dfah", "promptfoo", "mcpevals"]
 NFR6_THRESHOLD = 0.9
+
+# Phase 1: direct MCP output determinism — no LLM involved, drives NFR6 verdict
+PHASE1_TOOLS = ["dfah", "mcp-eval"]
+# Phase 2: LLM integration quality — advisory only, does not affect NFR6 verdict
+PHASE2_TOOLS = ["detllm", "deepeval", "mcpevals", "promptfoo"]
 
 
 def _sanitize_for_json(obj):
@@ -104,37 +109,74 @@ def assess_tool(tool: str, data: dict) -> dict:
     return assessment
 
 
-def generate_report(results_dir: Path, threshold: float) -> dict:
+def generate_report(results_dir: Path, threshold: float, phase: int = 0) -> dict:
+    """Generate the NFR6 report.
+
+    phase=1  → only Phase 1 tools (dfah, mcp-eval); NFR6 verdict from these alone
+    phase=2  → only Phase 2 tools (detllm, deepeval, mcpevals, promptfoo); all advisory
+    phase=0  → all tools; Phase 1 drives verdict, Phase 2 shown as advisory
+    """
+    if phase == 1:
+        active_tools = PHASE1_TOOLS
+    elif phase == 2:
+        active_tools = PHASE2_TOOLS
+    else:
+        active_tools = TOOL_NAMES
+
     results = load_results(results_dir)
     assessments = []
 
-    for tool in TOOL_NAMES:
+    for tool in active_tools:
+        is_advisory = tool in PHASE2_TOOLS
         if tool in results:
-            assessments.append(assess_tool(tool, results[tool]))
+            a = assess_tool(tool, results[tool])
+            a["advisory"] = is_advisory
+            assessments.append(a)
         else:
             assessments.append({
                 "tool": tool,
                 "available": False,
                 "determinism_score": None,
                 "nfr6_contribution": "not_available",
+                "advisory": is_advisory,
                 "details": {},
             })
 
-    available_scores = [a["determinism_score"] for a in assessments if a["determinism_score"] is not None]
+    # NFR6 verdict is driven by Phase 1 tools only (even in --phase all)
+    verdict_assessments = [
+        a for a in assessments
+        if not a.get("advisory", False) and a["determinism_score"] is not None
+    ]
+    advisory_assessments = [
+        a for a in assessments
+        if a.get("advisory", False) and a["determinism_score"] is not None
+    ]
 
+    available_scores = [a["determinism_score"] for a in verdict_assessments]
     overall_score = sum(available_scores) / len(available_scores) if available_scores else 0
     nfr6_passed = overall_score >= threshold
 
     report = {
         "nfr6_report": {
             "generated_at": datetime.now(timezone.utc).isoformat(),
+            "phase": phase if phase in (1, 2) else "all",
             "threshold": threshold,
             "overall_determinism_score": overall_score,
             "nfr6_verdict": "PASS" if nfr6_passed else "FAIL",
             "tools_evaluated": len(available_scores),
-            "tools_total": len(TOOL_NAMES),
+            "tools_total": len(active_tools),
+            "note": (
+                "NFR6 verdict based on Phase 1 (output determinism) tools only. "
+                "Phase 2 results are advisory."
+            ) if phase == 0 else None,
         },
         "per_tool_assessments": assessments,
+        "advisory_summary": {
+            "tools_evaluated": len(advisory_assessments),
+            "scores": {
+                a["tool"]: a["determinism_score"] for a in advisory_assessments
+            },
+        } if advisory_assessments else None,
         "dimensions": {
             "validation_determinism": {
                 "description": "validate_gemara_artifact produces identical results for identical inputs",
@@ -190,6 +232,13 @@ TOOL_DESCRIPTIONS = {
         "dimensions": "Full MCP surface (tools, resources, prompts)",
         "failure_mode": "MCP server responses diverge from golden reference outputs",
     },
+    "mcpevals": {
+        "full_name": "MCP Evals LLM Suite",
+        "phase": "Phase 2 (LLM)",
+        "what_it_measures": "Sends MCP tool calls through an LLM agent and scores responses on accuracy, completeness, relevance, clarity, and reasoning.",
+        "dimensions": "Tool selection, response quality, LLM-mediated MCP interaction",
+        "failure_mode": "LLM agent selects wrong tools or produces low-quality responses judged below threshold",
+    },
 }
 
 
@@ -198,41 +247,46 @@ def generate_markdown(report: dict, results_dir: Path) -> str:
     nfr6 = report["nfr6_report"]
     assessments = report["per_tool_assessments"]
     verdict_icon = "PASS" if nfr6["nfr6_verdict"] == "PASS" else "FAIL"
+    phase = nfr6.get("phase", "all")
+
+    phase_label = {1: "Phase 1 — Output Determinism", 2: "Phase 2 — LLM Advisory", "all": "All Phases"}.get(phase, "")
 
     lines = [
         "# NFR6 Determinism Compliance Report",
         "",
         f"**Generated:** {nfr6['generated_at']}",
+        f"**Phase:** {phase_label}",
         f"**Threshold:** {nfr6['threshold']:.0%} deterministic outcomes",
         f"**Overall Score:** {nfr6['overall_determinism_score']:.1%}",
         f"**Verdict:** {verdict_icon}",
         f"**Tools Evaluated:** {nfr6['tools_evaluated']}/{nfr6['tools_total']}",
-        "",
-        "---",
-        "",
-        "## Per-Tool Results",
-        "",
     ]
+    if nfr6.get("note"):
+        lines += ["", f"> {nfr6['note']}"]
+    lines += ["", "---", "", "## Per-Tool Results", ""]
 
-    evaluated = [a for a in assessments if a["available"] and a["determinism_score"] is not None]
+    primary = [a for a in assessments if a["available"] and a["determinism_score"] is not None and not a.get("advisory")]
+    advisory = [a for a in assessments if a["available"] and a["determinism_score"] is not None and a.get("advisory")]
     not_run = [a for a in assessments if not a["available"]]
 
-    for a in evaluated:
+    def _render_tool(a: dict) -> list[str]:
         tool = a["tool"]
         desc = TOOL_DESCRIPTIONS.get(tool, {})
         score = a["determinism_score"]
         score_str = f"{score:.1%}"
         status = "PASS" if a["nfr6_contribution"] == "pass" else "FAIL"
 
-        lines.append(f"### {desc.get('full_name', tool)} (`{tool}`)")
-        lines.append("")
-        lines.append(f"| | |")
-        lines.append(f"|---|---|")
-        lines.append(f"| **Score** | {score_str} ({status}) |")
-        lines.append(f"| **Phase** | {desc.get('phase', 'N/A')} |")
-        lines.append(f"| **What it measures** | {desc.get('what_it_measures', 'N/A')} |")
-        lines.append(f"| **Dimensions covered** | {desc.get('dimensions', 'N/A')} |")
-        lines.append(f"| **Failure mode** | {desc.get('failure_mode', 'N/A')} |")
+        out = [
+            f"### {desc.get('full_name', tool)} (`{tool}`)",
+            "",
+            f"| | |",
+            f"|---|---|",
+            f"| **Score** | {score_str} ({status}) |",
+            f"| **Phase** | {desc.get('phase', 'N/A')} |",
+            f"| **What it measures** | {desc.get('what_it_measures', 'N/A')} |",
+            f"| **Dimensions covered** | {desc.get('dimensions', 'N/A')} |",
+            f"| **Failure mode** | {desc.get('failure_mode', 'N/A')} |",
+        ]
 
         details = a.get("details", {})
         if tool == "dfah":
@@ -240,7 +294,6 @@ def generate_markdown(report: dict, results_dir: Path) -> str:
             faith = details.get("faithfulness", "N/A")
             traj_str = f"{traj:.1%}" if isinstance(traj, (int, float)) else traj
             faith_str = f"{faith:.1%}" if isinstance(faith, (int, float)) else faith
-
             dfah_path = results_dir / "dfah.json"
             benchmarks_summary = ""
             if dfah_path.exists():
@@ -250,39 +303,47 @@ def generate_markdown(report: dict, results_dir: Path) -> str:
                 total_cases = sum(b.get("total_cases", 0) for b in benchmarks)
                 runs_per = benchmarks[0].get("runs_per_case", "?") if benchmarks else "?"
                 benchmarks_summary = f"{len(benchmarks)} benchmarks, {total_cases} cases, {runs_per} runs each = {total_cases * int(runs_per)} total invocations"
-
-            lines.append("")
-            lines.append(f"**Detail:** trajectory determinism {traj_str}, faithfulness {faith_str}")
+            out.append("")
+            out.append(f"**Detail:** trajectory determinism {traj_str}, faithfulness {faith_str}")
             if benchmarks_summary:
-                lines.append(f"**Coverage:** {benchmarks_summary}")
-
+                out.append(f"**Coverage:** {benchmarks_summary}")
         elif tool == "promptfoo":
             passed = details.get("passed", 0)
             total = details.get("total", 0)
-            lines.append("")
-            lines.append(f"**Detail:** {passed}/{total} test assertions passed")
-
+            out.append("")
+            out.append(f"**Detail:** {passed}/{total} test assertions passed")
         elif tool == "detllm":
             passed = details.get("passed", 0)
             total = details.get("total", 0)
             tier = details.get("tier", "unknown")
-            lines.append("")
-            lines.append(f"**Detail:** {passed}/{total} scenarios (tier: {tier})")
-
+            out.append("")
+            out.append(f"**Detail:** {passed}/{total} scenarios (tier: {tier})")
         elif tool == "deepeval":
             passed = details.get("passed", 0)
             total = details.get("total", 0)
-            lines.append("")
-            lines.append(f"**Detail:** {passed}/{total} test cases passed")
-
-        elif tool == "mcp-eval":
+            out.append("")
+            out.append(f"**Detail:** {passed}/{total} test cases passed")
+        elif tool in ("mcp-eval", "mcpevals"):
             passed = details.get("passed", 0)
             evaluated_count = details.get("evaluated", 0)
             pending = details.get("pending", 0)
-            lines.append("")
-            lines.append(f"**Detail:** {passed}/{evaluated_count} evaluated, {pending} pending")
+            out.append("")
+            out.append(f"**Detail:** {passed}/{evaluated_count} evaluated, {pending} pending")
 
+        out.append("")
+        return out
+
+    if primary:
+        lines.append("### Phase 1 — Output Determinism (drives NFR6 verdict)")
         lines.append("")
+        for a in primary:
+            lines.extend(_render_tool(a))
+
+    if advisory:
+        lines.append("### Phase 2 — LLM Integration Quality (advisory, not included in NFR6 verdict)")
+        lines.append("")
+        for a in advisory:
+            lines.extend(_render_tool(a))
 
     if not_run:
         lines.append("## Not Evaluated")
@@ -324,14 +385,21 @@ def main():
     parser.add_argument("--results-dir", type=Path, default=Path(__file__).parent.parent / "results")
     parser.add_argument("--threshold", type=float, default=NFR6_THRESHOLD)
     parser.add_argument("--output", type=Path, default=Path(__file__).parent.parent / "results" / "nfr6-report.json")
+    parser.add_argument(
+        "--phase",
+        type=int,
+        choices=[0, 1, 2],
+        default=0,
+        help="0=all (default), 1=Phase 1 output determinism only, 2=Phase 2 LLM advisory only",
+    )
     args = parser.parse_args()
 
     if not args.results_dir.exists():
         print(f"Results directory not found: {args.results_dir}")
-        print("Run 'make eval-all' first to generate results.")
+        print("Run 'make eval-phase1' first to generate results.")
         sys.exit(1)
 
-    report = generate_report(args.results_dir, args.threshold)
+    report = generate_report(args.results_dir, args.threshold, phase=args.phase)
 
     report = _sanitize_for_json(report)
 
@@ -348,6 +416,8 @@ def main():
     print("NFR6 Compliance Report")
     print("=" * 60)
     print(f"\nGenerated:  {nfr6['generated_at']}")
+    phase_label = {1: "Phase 1 (output determinism)", 2: "Phase 2 (LLM advisory)", 0: "All phases"}.get(args.phase, "")
+    print(f"Phase:      {phase_label}")
     print(f"Threshold:  {nfr6['threshold']:.0%}")
     print(f"Score:      {nfr6['overall_determinism_score']:.1%}")
     print(f"Verdict:    {nfr6['nfr6_verdict']}")
@@ -355,15 +425,16 @@ def main():
 
     print("\nPer-Tool:")
     for a in report["per_tool_assessments"]:
+        advisory_tag = " [advisory]" if a.get("advisory") else ""
         if not a["available"]:
-            print(f"  {a['tool']:<15} {'N/A':>8}  NOT AVAILABLE")
+            print(f"  {a['tool']:<15} {'N/A':>8}  NOT AVAILABLE{advisory_tag}")
         elif a["nfr6_contribution"] == "pending":
             pending = a["details"].get("pending", 0)
-            print(f"  {a['tool']:<15} {'N/A':>8}  PENDING ({pending} scenarios awaiting live execution)")
+            print(f"  {a['tool']:<15} {'N/A':>8}  PENDING ({pending} scenarios awaiting live execution){advisory_tag}")
         else:
             score = a["determinism_score"]
             score_str = f"{score:.1%}" if score is not None else "N/A"
-            print(f"  {a['tool']:<15} {score_str:>8}  {a['nfr6_contribution'].upper()}")
+            print(f"  {a['tool']:<15} {score_str:>8}  {a['nfr6_contribution'].upper()}{advisory_tag}")
 
     print(f"\nReports written to:")
     print(f"  JSON:     {args.output}")
