@@ -1,6 +1,6 @@
 services:
   gemara-mcp:
-    image: ${GEMARA_MCP_IMAGE:-ghcr.io/gemaraproj/gemara-mcp:v0.1.0}
+    image: ${GEMARA_MCP_IMAGE:-ghcr.io/gemaraproj/gemara-mcp:v0.5.0}
     command: ["serve", "--mode", "${GEMARA_MCP_MODE:-artifact}"]
     stdin_open: true
     healthcheck:
